@@ -59,6 +59,7 @@ import { ObjectiveRenderer, type ObjectiveData } from './renderer/ObjectiveRende
 import { ProductionChainRenderer, type ProductionChainData } from './renderer/ProductionChainRenderer'
 import { AbilityBar } from './hud/AbilityBar'
 import { EconomyPanel } from './hud/EconomyPanel'
+import { UnitInspectionPanel, type ToolUseRecord } from './hud/UnitInspectionPanel'
 import { toastManager } from './hud/ToastManager'
 import { KeyboardOverlay } from './hud/KeyboardOverlay'
 import { CooldownManager } from './game/CooldownManager'
@@ -128,6 +129,10 @@ let cooldownManager: CooldownManager
 let productionChainRenderer: ProductionChainRenderer
 let economyPanel: EconomyPanel
 let keyboardOverlay: KeyboardOverlay
+let unitInspectionPanel: UnitInspectionPanel
+
+// Recent tool uses per session (keyed by session id, last 5 per session)
+const recentToolsMap: Map<string, ToolUseRecord[]> = new Map()
 
 // Production chain data cache — updated via WebSocket, keyed by territory
 const productionChainCache: Map<string, ProductionChainData> = new Map()
@@ -222,8 +227,9 @@ async function init() {
   packetManager.onPacketArrive = () => {
     soundManager.play('packet_arrive')
   }
-  objectiveRenderer.onObjectiveDefeated = () => {
+  objectiveRenderer.onObjectiveDefeated = (objective) => {
     soundManager.play('objective_defeat')
+    toastManager.success(`Objective defeated: ${objective?.name || 'Unknown'}`, '\u{2694}')
   }
 
   // ProductionChainRenderer: Factorio-style territory production view
@@ -320,6 +326,7 @@ async function init() {
   commandBar = new CommandBar()
   unitDetail = new UnitDetail()
   floatingPanel = new FloatingUnitPanel()
+  unitInspectionPanel = new UnitInspectionPanel()
   feedManager = new FeedManager()
 
   // 4b. Initialize Ability Bar system
@@ -554,6 +561,7 @@ async function init() {
             if (objective.status === 'defeated') {
               soundManager.play('objective_defeat')
               commandBar.setTicker(`BOSS DEFEATED: "${target.name}"!`)
+              toastManager.success(`Objective defeated: ${target.name}`, '\u{2694}')
             } else {
               soundManager.play('command_sent')
               commandBar.setTicker(`"${target.name}" HP: ${objective.hp_remaining}/${objective.hp_total}`)
@@ -594,13 +602,23 @@ async function init() {
     }
   })
 
-  // Unit click -> floating panel
+  // Unit click -> floating panel + inspection panel
   battlefield.onUnitClick = (unitId, screenX, screenY) => {
     const unit = battlefield.getUnit(unitId)
     const session = sessions.get(unitId)
     if (unit) {
       floatingPanel.toggle(unitId, unit, session, screenX, screenY)
-      selectUnit(floatingPanel.isVisible() ? unitId : null)
+      const isSelected = floatingPanel.isVisible()
+      selectUnit(isSelected ? unitId : null)
+
+      // Show/hide inspection panel in sync
+      if (isSelected) {
+        const recentTools = recentToolsMap.get(unitId) || []
+        const combo = comboTracker.getCombo(unitId)
+        unitInspectionPanel.show(unitId, unit, session, recentTools, combo)
+      } else {
+        unitInspectionPanel.hide()
+      }
     }
   }
 
@@ -759,8 +777,10 @@ function setupEventClient() {
       if (threatEvent.severity === 'critical') {
         soundManager.play('threat_critical')
         screenEffects.triggerGlitch()
+        toastManager.danger(`CRITICAL: ${threatEvent.title || threatEvent.threatClass || 'Unknown threat'}`, '\u{1F6A8}')
       } else {
         soundManager.play('threat_spawn')
+        toastManager.warning(`Threat detected: ${threatEvent.threatClass || threatEvent.title || 'Unknown'}`, '\u{26A0}')
       }
     } else if (msg.type === 'threat_resolved') {
       const { id } = msg.payload as { id: string }
@@ -811,7 +831,7 @@ function setupEventClient() {
       }
     } else if ((msg as any).type === 'resource_update') {
       // Single resource update — accumulate into economy panel
-      const { type, amount } = (msg as any).payload as { type: string; amount: number; description: string }
+      const { type, amount, description } = (msg as any).payload as { type: string; amount: number; description: string }
       const tx = { type, amount, timestamp: new Date().toISOString() }
       economyPanel.updateRevenue(
         economyPanel['mrr'],
@@ -820,6 +840,14 @@ function setupEventClient() {
       )
       // Also update the resource bar's revenue
       resourceBar.updateRevenue(economyPanel['todayTotal'] + amount)
+      // Battlefield toast for revenue events
+      if (type === 'churn') {
+        toastManager.danger(`Churn detected${description ? ': ' + description : ''}`, '\u{2620}')
+      } else if (amount < 0) {
+        toastManager.danger(`Revenue drop: -$${Math.abs(amount).toFixed(0)}`, '\u{1F4C9}')
+      } else if (amount > 0) {
+        toastManager.info(`+$${amount.toFixed(0)}${description ? ' — ' + description : ''}`, '\u{1F4B0}')
+      }
     } else if ((msg as any).type === 'monitor') {
       // MonitorOrchestrator heartbeat — full revenue snapshot
       const revenue = (msg as any).payload?.revenue as { mrr: number; transactions: any[] } | undefined
@@ -991,6 +1019,8 @@ function ensureUnit(session: ManagedSession) {
     if (health <= 0 && !unit.isCollapsing && !unit.isRetiring) {
       unit.collapse()
       battlefield.particleSystem.burst(unit.worldX, unit.worldY, 0xE8682A, 18)
+      const collapseName = session.name || session.cwd?.split('/').pop() || session.id.slice(0, 8)
+      toastManager.danger(`Unit collapsed: ${collapseName}`, '\u{1F480}')
       // Remove after collapse animation completes
       setTimeout(() => {
         battlefield.removeUnit(session.id)
@@ -1271,6 +1301,7 @@ function selectUnit(unitId: string | null) {
   } else {
     gameState.deselectAll()
     floatingPanel.hide()
+    unitInspectionPanel.hide()
     abilityBar.hide()
     commandBar.selectSession('')
   }

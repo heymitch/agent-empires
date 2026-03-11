@@ -18,6 +18,7 @@ import type {
   ManagedSession,
 } from '../../../shared/types'
 import { soundManager } from '../../audio'
+import { toastManager } from '../../hud/ToastManager'
 
 // Territory detection: file path rules (mirrors server-side TerritoryDetector)
 const PATH_RULES: Array<{ pattern: RegExp; territory: TerritoryId }> = [
@@ -177,6 +178,9 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
             tierInfo.color,
             tierInfo.particleCount
           )
+          // Battlefield toast for combo milestones
+          const comboIcon = tierInfo.tier === 'rampage' ? '\u{1F525}' : tierInfo.tier === 'streak' ? '\u{26A1}' : '\u{2B50}'
+          toastManager.success(`${label}`, comboIcon)
         }
       } else {
         // Error resets combo
@@ -233,6 +237,10 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
 
       // Dissolve effect
       combatAnimator.playDissolve(unit.worldX, unit.worldY)
+
+      // Battlefield toast for unit going offline
+      const unitName = session?.name || session?.cwd?.split('/').pop() || event.sessionId.slice(0, 8)
+      toastManager.danger(`Unit collapsed: ${unitName}`, '\u{1F480}')
 
       // Clean up combo state
       comboTracker.resetCombo(event.sessionId)
