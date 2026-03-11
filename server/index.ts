@@ -76,6 +76,9 @@ let fleetSignaling: FleetSignaling | null = null
 // Fleet persistence (PRD 12 — battlefield state survives restarts)
 let fleetPersistence: FleetPersistence | null = null
 
+// Road aggregator (hoisted for fleet persistence access)
+let roadAggregator: RoadAggregator | null = null
+
 // ============================================================================
 // Version (read from package.json)
 // ============================================================================
@@ -3322,13 +3325,10 @@ function main() {
     threatBridge.start()
 
     // Start road aggregator (polls ae_events, writes ae_roads, broadcasts to clients)
-    // Cache latest roads for WasteDetector consumption
-    let latestRoads: import('./RoadAggregator.js').RoadData[] = []
-    const roadAggregator = new RoadAggregator({
+    roadAggregator = new RoadAggregator({
       supabaseUrl,
       supabaseKey,
       onRoadsUpdated: (roads) => {
-        latestRoads = roads
         broadcast({ type: 'roads', payload: roads } as any)
       },
     })

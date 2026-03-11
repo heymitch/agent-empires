@@ -107,6 +107,8 @@ export class RoadRenderer {
   private roads: RoadState[] = []
   private elapsed = 0
   private queueCounts: Map<string, number> = new Map()
+  private deadRoadKeys: Set<string> = new Set()
+  private deadRoadGraphics: Graphics
 
   private tooltip: HTMLDivElement | null = null
   private hoveredRoad: RoadState | null = null
@@ -121,9 +123,11 @@ export class RoadRenderer {
     this.roadGraphics = new Graphics()
     this.dotGraphics = new Graphics()
     this.queueGraphics = new Graphics()
+    this.deadRoadGraphics = new Graphics()
     this.hitContainer = new Container()
 
     this.layer.addChild(this.roadGraphics)
+    this.layer.addChild(this.deadRoadGraphics)
     this.layer.addChild(this.dotGraphics)
     this.layer.addChild(this.queueGraphics)
     this.layer.addChild(this.hitContainer)
@@ -160,6 +164,17 @@ export class RoadRenderer {
     } else {
       this.queueCounts.set(territory, count)
     }
+  }
+
+  /**
+   * Mark roads as dead. Dead roads render with dashed strokes,
+   * reduced alpha (0.3), and a skull/X icon at the midpoint.
+   * @param roadKeys Array of road keys in "from::to" format
+   */
+  setDeadRoads(roadKeys: string[]): void {
+    this.deadRoadKeys = new Set(roadKeys)
+    this.drawRoads()
+    this.drawDeadRoadOverlays()
   }
 
   updateRoads(roads: RoadData[]): void {
@@ -329,6 +344,21 @@ export class RoadRenderer {
     g.clear()
 
     for (const road of this.roads) {
+      const roadKey = `${road.from}::${road.to}`
+      const isDead = this.deadRoadKeys.has(roadKey)
+
+      if (isDead) {
+        // Dead roads: dashed stroke at reduced alpha
+        this.drawDashedBezier(
+          g,
+          road.fx, road.fy,
+          road.cx, road.cy,
+          road.tx, road.ty,
+          { color: 0x2A2118, width: LINE_WIDTHS[road.level] ?? 1, alpha: 0.3, dashLength: 8, gapLength: 6 }
+        )
+        continue
+      }
+
       const width = LINE_WIDTHS[road.level] ?? 1
       const destQueue = this.queueCounts.get(road.to) ?? 0
       const color = destQueue > 10 ? 0xCC3333 : (ROAD_COLORS[road.level] ?? 0x2A2118)
@@ -352,6 +382,102 @@ export class RoadRenderer {
       g.moveTo(road.fx, road.fy)
       g.quadraticCurveTo(road.cx, road.cy, road.tx, road.ty)
       g.stroke({ color, width, alpha })
+    }
+  }
+
+  /**
+   * Draw dead road overlays: an "X" icon at the midpoint of each dead road.
+   */
+  private drawDeadRoadOverlays(): void {
+    const g = this.deadRoadGraphics
+    g.clear()
+
+    // Remove old dead-road labels
+    for (const child of [...this.layer.children]) {
+      if (typeof child.label === 'string' && child.label.startsWith('dead-road-')) {
+        this.layer.removeChild(child)
+        child.destroy()
+      }
+    }
+
+    for (const road of this.roads) {
+      const roadKey = `${road.from}::${road.to}`
+      if (!this.deadRoadKeys.has(roadKey)) continue
+
+      // Find midpoint of bezier (t = 0.5)
+      const mid = this.evalQuadBezier(road.fx, road.fy, road.cx, road.cy, road.tx, road.ty, 0.5)
+
+      // Draw X icon at midpoint
+      const size = 6
+      const color = 0xCC3333 // Red for dead
+      const alpha = 0.7
+
+      // Background circle
+      g.circle(mid.x, mid.y, size + 2).fill({ color: 0x0A0806, alpha: 0.8 })
+      g.circle(mid.x, mid.y, size + 2).stroke({ color, width: 1, alpha: 0.5 })
+
+      // X strokes
+      g.moveTo(mid.x - size, mid.y - size)
+      g.lineTo(mid.x + size, mid.y + size)
+      g.stroke({ color, width: 2, alpha })
+
+      g.moveTo(mid.x + size, mid.y - size)
+      g.lineTo(mid.x - size, mid.y + size)
+      g.stroke({ color, width: 2, alpha })
+    }
+  }
+
+  /**
+   * Draw a dashed quadratic bezier curve by sampling points along it.
+   */
+  private drawDashedBezier(
+    g: Graphics,
+    x0: number, y0: number,
+    cx: number, cy: number,
+    x1: number, y1: number,
+    opts: { color: number; width: number; alpha: number; dashLength: number; gapLength: number }
+  ): void {
+    const totalLength = this.approxBezierLength(x0, y0, cx, cy, x1, y1, 40)
+    const segmentLength = opts.dashLength + opts.gapLength
+    let traveled = 0
+    let drawing = true
+
+    // Sample many points along the curve
+    const sampleCount = 100
+    const points: { x: number; y: number; dist: number }[] = []
+    let prevPt = this.evalQuadBezier(x0, y0, cx, cy, x1, y1, 0)
+    let cumDist = 0
+    points.push({ ...prevPt, dist: 0 })
+
+    for (let i = 1; i <= sampleCount; i++) {
+      const t = i / sampleCount
+      const pt = this.evalQuadBezier(x0, y0, cx, cy, x1, y1, t)
+      const dx = pt.x - prevPt.x
+      const dy = pt.y - prevPt.y
+      cumDist += Math.sqrt(dx * dx + dy * dy)
+      points.push({ ...pt, dist: cumDist })
+      prevPt = pt
+    }
+
+    // Walk through points, toggling between dash and gap
+    let dashStart = true
+    let nextToggle = opts.dashLength
+    let segStartIdx = 0
+
+    for (let i = 1; i < points.length; i++) {
+      if (points[i].dist >= nextToggle || i === points.length - 1) {
+        if (dashStart) {
+          // Draw this dash segment
+          g.moveTo(points[segStartIdx].x, points[segStartIdx].y)
+          for (let j = segStartIdx + 1; j <= i; j++) {
+            g.lineTo(points[j].x, points[j].y)
+          }
+          g.stroke({ color: opts.color, width: opts.width, alpha: opts.alpha })
+        }
+        segStartIdx = i
+        dashStart = !dashStart
+        nextToggle += dashStart ? opts.dashLength : opts.gapLength
+      }
     }
   }
 
@@ -514,9 +640,10 @@ export class RoadRenderer {
     this.roadGraphics.destroy()
     this.dotGraphics.destroy()
     this.queueGraphics.destroy()
-    // Remove queue labels
+    this.deadRoadGraphics.destroy()
+    // Remove queue labels and dead-road markers
     for (const child of [...this.layer.children]) {
-      if (typeof child.label === 'string' && child.label.startsWith('queue-label-')) {
+      if (typeof child.label === 'string' && (child.label.startsWith('queue-label-') || child.label.startsWith('dead-road-'))) {
         this.layer.removeChild(child)
         child.destroy()
       }
