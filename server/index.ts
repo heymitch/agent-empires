@@ -2398,6 +2398,76 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
     return
   }
 
+  // POST /objectives/seed — create a sample campaign with 5 bosses for testing
+  if (req.method === 'POST' && req.url === '/objectives/seed') {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized' }))
+      return
+    }
+    ;(async () => {
+      try {
+        const sampleBosses = [
+          { name: 'Copy Generation', territory: 'fulfillment', hp_total: 15, priority: 5, description: 'Generate all copy assets for the bootcamp launch', sub_tasks: [
+            { name: 'Email sequence (6 emails)', completed: false },
+            { name: 'Landing page copy', completed: false },
+            { name: 'Sales page long-form', completed: false },
+            { name: 'Ad creatives (5 variants)', completed: false },
+            { name: 'Social proof section', completed: false },
+          ]},
+          { name: 'Kit Email Wiring', territory: 'lead-gen', hp_total: 7, priority: 3, description: 'Wire all email sequences in Kit with proper tags and triggers' },
+          { name: 'Landing Pages Live', territory: 'lead-gen', hp_total: 5, priority: 4, description: 'Deploy landing pages to Vercel with analytics' },
+          { name: 'Checkout Flow', territory: 'sales', hp_total: 4, priority: 2, description: 'SamCart checkout with order bumps and upsells' },
+          { name: 'Quality Gate', territory: 'hq', hp_total: 3, priority: 1, description: 'Final review: copy quality, link checks, mobile responsiveness' },
+        ]
+
+        const created: any[] = []
+        const createdIds: Record<string, string> = {}
+
+        // Create all bosses first
+        for (const boss of sampleBosses) {
+          const obj = await objectiveManager!.createObjective(boss)
+          if (obj) {
+            created.push(obj)
+            createdIds[boss.name] = obj.id
+            log(`[Objectives/Seed] Created boss: "${obj.name}" (HP: ${obj.hp_total})`)
+          }
+        }
+
+        // Set dependencies: Kit Wiring and Landing Pages depend on Copy Generation
+        // Checkout depends on Landing Pages, Quality Gate depends on Copy Generation
+        const deps: Array<{ name: string; dependsOn: string }> = [
+          { name: 'Kit Email Wiring', dependsOn: 'Copy Generation' },
+          { name: 'Landing Pages Live', dependsOn: 'Copy Generation' },
+          { name: 'Checkout Flow', dependsOn: 'Landing Pages Live' },
+          { name: 'Quality Gate', dependsOn: 'Copy Generation' },
+        ]
+
+        for (const dep of deps) {
+          const objId = createdIds[dep.name]
+          const depId = createdIds[dep.dependsOn]
+          if (objId && depId) {
+            await objectiveManager!.updateStatus(objId, 'blocked')
+          }
+        }
+
+        // Simulate partial progress: drain some HP on the first boss
+        if (createdIds['Copy Generation']) {
+          await objectiveManager!.updateHP(createdIds['Copy Generation'], -3)
+        }
+
+        log(`[Objectives/Seed] Sample campaign created: ${created.length} bosses`)
+        res.writeHead(201, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, created: created.length, objectives: created }))
+      } catch (err) {
+        log(`[Objectives/Seed] Error: ${err}`)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: String(err) }))
+      }
+    })()
+    return
+  }
+
   // Objective-specific endpoints: /objectives/:id/(hp|status|assign)
   const objectiveActionMatch = req.url?.match(/^\/objectives\/([a-f0-9-]+)\/(hp|status|assign)$/)
   if (objectiveActionMatch && objectiveManager) {
