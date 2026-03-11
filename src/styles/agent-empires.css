@@ -2322,3 +2322,189 @@ kbd {
   background: rgba(0, 255, 204, 0.2);
   box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
 }
+
+/* ================================================================
+   Economy Panel — Bottom-right revenue overlay (Shift+E toggle)
+   ================================================================ */
+
+.economy-panel {
+  position: fixed;
+  bottom: 60px;
+  right: 16px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(10, 10, 15, 0.94);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 14px 16px;
+  z-index: 500;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 215, 0, 0.04);
+  animation: economy-slide-in 0.2s ease-out;
+}
+
+@keyframes economy-slide-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.economy-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.economy-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--accent-gold);
+  text-transform: uppercase;
+}
+
+.economy-hotkey {
+  font-size: 9px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.economy-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.economy-metric-label {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.economy-metric-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.economy-mrr .economy-metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+}
+
+.economy-today {
+  font-size: 18px !important;
+}
+
+.economy-positive {
+  color: var(--accent-success) !important;
+}
+
+.economy-negative {
+  color: var(--accent-danger) !important;
+}
+
+.economy-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.economy-section-label {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.economy-tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.economy-tx-item {
+  display: grid;
+  grid-template-columns: 18px 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.economy-tx-item:last-child {
+  border-bottom: none;
+}
+
+.economy-tx-icon {
+  font-size: 12px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.economy-tx-type {
+  color: var(--text-secondary);
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.economy-tx-amount {
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.economy-tx-time {
+  color: var(--text-dim);
+  font-size: 9px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.economy-sparkline {
+  padding: 4px 0;
+}
+
+.economy-sparkline svg {
+  display: block;
+  width: 100%;
+  height: 40px;
+}
+
+.economy-empty {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* Scrollbar for transaction list */
+.economy-tx-list::-webkit-scrollbar {
+  width: 3px;
+}
+
+.economy-tx-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.economy-tx-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
