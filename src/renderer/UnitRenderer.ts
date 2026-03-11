@@ -15,6 +15,7 @@ import type { ZoomVisibility } from './ZoomController'
 
 export type UnitStatus = 'idle' | 'working' | 'thinking' | 'combat' | 'exhausted' | 'offline'
 export type UnitClass = 'command' | 'operations' | 'recon'
+export type SustainedToolType = 'bash' | 'read' | 'write' | 'search' | null
 
 const CLASS_CONFIG: Record<UnitClass, { radius: number; accent: number; ringWidth: number; healthBarWidth: number }> = {
   command:    { radius: 44, accent: 0xFFB86C, ringWidth: 4, healthBarWidth: 64 },    // amber
@@ -50,6 +51,7 @@ export class UnitRenderer {
   parentSessionId?: string
 
   private body: Graphics
+  private sustainedGraphics: Graphics
   private statusRing: Graphics
   private selectionRing: Graphics
   private nameplate: Text
@@ -62,6 +64,8 @@ export class UnitRenderer {
   private _name: string
   private _currentTool: string = ''
   private _unitClass: UnitClass = 'command'
+  private _sustainedTool: SustainedToolType = null
+  private _sustainedPhase = 0
   private modelLabel: Text
   private createdAt: number
 
@@ -106,6 +110,10 @@ export class UnitRenderer {
     this.body = new Graphics()
     this.drawBody()
     this.container.addChild(this.body)
+
+    // Sustained tool effects layer (renders on top of body, around the unit)
+    this.sustainedGraphics = new Graphics()
+    this.container.addChild(this.sustainedGraphics)
 
     // Nameplate
     const nameStyle = new TextStyle({
@@ -285,6 +293,17 @@ export class UnitRenderer {
   }
 
   /**
+   * Set a sustained-tool animation that loops until cleared.
+   * Provides ambient visual feedback for long-running operations.
+   */
+  setSustainedTool(type: SustainedToolType): void {
+    if (this._sustainedTool === type) return
+    this._sustainedTool = type
+    this._sustainedPhase = 0
+    this.sustainedGraphics.clear()
+  }
+
+  /**
    * Show a floating combo label above the unit that fades up and out over 1.5s.
    * e.g. "COMBO x3", "STREAK x6", "RAMPAGE x10!"
    */
@@ -376,6 +395,7 @@ export class UnitRenderer {
       if (!visibility.showUnitDetails) {
         this.nameplate.visible = true
         this.statusRing.visible = false
+        this.sustainedGraphics.visible = false
         this.selectionRing.visible = false
         this.healthBar.visible = false
         this.toolText.visible = false
@@ -383,6 +403,7 @@ export class UnitRenderer {
       } else {
         this.nameplate.visible = true
         this.statusRing.visible = true
+        this.sustainedGraphics.visible = true
         this.selectionRing.visible = this._selected
       }
     }
@@ -462,6 +483,20 @@ export class UnitRenderer {
     // Redraw status ring with current pulse
     this.drawStatusRing()
 
+    // Sustained-tool animation
+    if (this._sustainedTool) {
+      // Advance phase at tool-specific rates (radians/second)
+      const rateMap: Record<string, number> = {
+        bash: Math.PI * 4,     // 2Hz oscillation
+        read: Math.PI * 2,     // 1 rev/s
+        write: Math.PI * 2 * 3.333, // ~3.33Hz for 300ms cycle
+        search: Math.PI * 1,   // 0.5 rev/s
+      }
+      this._sustainedPhase += dt * rateMap[this._sustainedTool]
+      if (this._sustainedPhase > Math.PI * 200) this._sustainedPhase -= Math.PI * 200
+      this.drawSustainedEffect()
+    }
+
     // Subtle hover effect on selection ring
     if (this._selected) {
       this.selectionRing.rotation += dt * 0.5
@@ -504,6 +539,65 @@ export class UnitRenderer {
 
   get collapseComplete(): boolean {
     return this._collapsing && this._collapseElapsed >= this._collapseDuration
+  }
+
+  /**
+   * Draw sustained-tool animation effect based on current type and phase.
+   * Called every frame from update() when a sustained tool is active.
+   */
+  private drawSustainedEffect(): void {
+    this.sustainedGraphics.clear()
+    if (!this._sustainedTool) return
+
+    const cfg = CLASS_CONFIG[this._unitClass]
+    const r = cfg.radius
+
+    switch (this._sustainedTool) {
+      case 'bash': {
+        // Pulsing orange ring that grows/shrinks. Width oscillates 3-8px at 2Hz.
+        const pulseT = (Math.sin(this._sustainedPhase) + 1) / 2 // 0..1
+        const ringWidth = 3 + pulseT * 5
+        this.sustainedGraphics
+          .circle(0, 0, r + 4 + pulseT * 2)
+          .stroke({ width: ringWidth, color: 0xE8682A, alpha: 0.4 + pulseT * 0.3 })
+        break
+      }
+      case 'read': {
+        // Rotating 90-degree arc segment in teal, 1 rev/s.
+        const startAngle = this._sustainedPhase
+        const endAngle = startAngle + Math.PI / 2
+        this.sustainedGraphics
+          .arc(0, 0, r + 6, startAngle, endAngle)
+          .stroke({ width: 3, color: 0x4A9DB8, alpha: 0.7 })
+        break
+      }
+      case 'write': {
+        // Intermittent flash pulses on the body. 100ms on every 300ms cycle in amber.
+        // Phase is in radians; convert to a 300ms cycle: full cycle = 2*PI at ~3.33Hz
+        // We use the phase modulo to determine on/off
+        const cyclePos = (this._sustainedPhase % (Math.PI * 2)) / (Math.PI * 2)
+        const isFlashing = cyclePos < 0.333 // ~100ms of a 300ms cycle
+        if (isFlashing) {
+          this.sustainedGraphics
+            .circle(0, 0, r * 0.7)
+            .fill({ color: 0xFFB86C, alpha: 0.25 })
+        }
+        break
+      }
+      case 'search': {
+        // Radar sweep: 45-degree arc sweeps 360 degrees at 0.5 rev/s in green.
+        const sweepAngle = this._sustainedPhase
+        const arcSpan = Math.PI / 4 // 45 degrees
+        this.sustainedGraphics
+          .arc(0, 0, r + 8, sweepAngle, sweepAngle + arcSpan)
+          .stroke({ width: 2.5, color: 0x82C896, alpha: 0.6 })
+        // Faint trail behind the sweep
+        this.sustainedGraphics
+          .arc(0, 0, r + 8, sweepAngle - arcSpan, sweepAngle)
+          .stroke({ width: 1.5, color: 0x82C896, alpha: 0.2 })
+        break
+      }
+    }
   }
 
   /** Linearly interpolate between two hex colors. */

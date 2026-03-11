@@ -17,6 +17,7 @@ import type {
   PostToolUseEvent,
   ManagedSession,
 } from '../../../shared/types'
+import { soundManager } from '../../audio'
 
 // Territory detection: file path rules (mirrors server-side TerritoryDetector)
 const PATH_RULES: Array<{ pattern: RegExp; territory: TerritoryId }> = [
@@ -124,6 +125,18 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
       unit.setStatus('working')
       unit.setCurrentTool(e.tool)
 
+      // Activate sustained-tool animation based on tool type
+      const sustainedMap: Record<string, 'bash' | 'read' | 'write' | 'search'> = {
+        'Bash': 'bash',
+        'Read': 'read',
+        'Write': 'write',
+        'Edit': 'write',
+        'Grep': 'search',
+        'Glob': 'search',
+      }
+      const sustainedType = sustainedMap[e.tool] || null
+      unit.setSustainedTool(sustainedType)
+
       // Detect territory and move if needed
       const territory = detectTerritoryFromEvent(event)
       if (territory !== gameUnit.territory) {
@@ -140,6 +153,7 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
       if (!unit || !session) break
 
       unit.setCurrentTool('')
+      unit.setSustainedTool(null) // Clear sustained animation
       gameState.updateUnitStatus(session.id, 'working')
 
       // Play result animation
@@ -154,6 +168,9 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
           const suffix = tierInfo.tier === 'rampage' ? '!' : ''
           const label = `${tierInfo.label} x${count}${suffix}`
           unit.showCombo(label, tierInfo.color)
+          // Napoleon-era combo sound — pitch scales with tier
+          const tierNum = tierInfo.tier === 'combo' ? 1 : tierInfo.tier === 'streak' ? 2 : 3
+          soundManager.playCombo(tierNum)
           // Particle burst scaled to tier
           battlefield.particleSystem.burst(
             unit.worldX, unit.worldY,
@@ -174,6 +191,7 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
       gameState.updateUnitStatus(session.id, 'idle')
       unit.setStatus('idle')
       unit.setCurrentTool('')
+      unit.setSustainedTool(null)
 
       // Return to HQ
       movementManager.moveToTerritory(session.id, 'hq')
@@ -208,6 +226,10 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
       gameState.updateUnitStatus(session.id, 'offline')
       unit.setStatus('offline')
       unit.setCurrentTool('')
+      unit.setSustainedTool(null)
+
+      // Napoleon-era collapse sound — descending saw wave
+      soundManager.play('collapse')
 
       // Dissolve effect
       combatAnimator.playDissolve(unit.worldX, unit.worldY)
