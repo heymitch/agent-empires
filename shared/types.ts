@@ -154,6 +154,19 @@ export interface PermissionOption {
   label: string    // "Yes", "Yes, and always allow...", "No"
 }
 
+/** Threat event from Supabase data bridge */
+export interface ThreatEvent {
+  id: string
+  type: 'support_ticket' | 'deal_lost' | 'churn_risk' | 'cold_lead'
+  severity: 'low' | 'elevated' | 'critical'
+  territory: string
+  title: string
+  description: string
+  sourceTable: string
+  sourceId: string
+  timestamp: number
+}
+
 /** Server -> Client messages */
 export type ServerMessage =
   | { type: 'event'; payload: ClaudeEvent }
@@ -165,7 +178,11 @@ export type ServerMessage =
   | { type: 'session_update'; payload: ManagedSession }
   | { type: 'permission_prompt'; payload: { sessionId: string; tool: string; context: string; options: PermissionOption[] } }
   | { type: 'permission_resolved'; payload: { sessionId: string } }
+  | { type: 'threat'; payload: ThreatEvent }
+  | { type: 'threat_resolved'; payload: { id: string } }
   | { type: 'text_tiles'; payload: TextTile[] }
+  | { type: 'objectives'; payload: unknown[] }
+  | { type: 'production'; payload: unknown }
 
 /** Client -> Server messages */
 export type ClientMessage =
@@ -295,6 +312,8 @@ export interface ManagedSession {
     q: number
     r: number
   }
+  /** Parent session ID (if spawned by another session via Task tool) */
+  parentSessionId?: string
 }
 
 /** Git repository status */

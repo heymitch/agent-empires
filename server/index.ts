@@ -1,5 +1,5 @@
 /**
- * Vibecraft WebSocket Server
+ * Agent Empires WebSocket Server
  *
  * This server:
  * 1. Watches the events JSONL file for changes
@@ -38,6 +38,21 @@ import { DEFAULTS } from '../shared/defaults.js'
 import { GitStatusManager } from './GitStatusManager.js'
 import { ProjectsManager } from './ProjectsManager.js'
 import { fileURLToPath } from 'url'
+import { detectTerritory } from './TerritoryDetector.js'
+import { ThreatDataBridge } from './ThreatDataBridge.js'
+import { SupabasePersistence } from './SupabasePersistence.js'
+import { RoadAggregator } from './RoadAggregator.js'
+import { ObjectiveManager } from './ObjectiveManager.js'
+import { ProductionDataManager } from './ProductionDataManager.js'
+
+// Supabase persistence (initialized in startServer if env vars present)
+let persistence: SupabasePersistence | null = null
+
+// Objective manager (initialized in main if env vars present)
+let objectiveManager: ObjectiveManager | null = null
+
+// Production data manager (Factorio Mode — initialized in main if env vars present)
+let productionManager: ProductionDataManager | null = null
 
 // ============================================================================
 // Version (read from package.json)
@@ -45,6 +60,33 @@ import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+
+// ============================================================================
+// Load .env (no dotenv dependency — simple manual parse)
+// ============================================================================
+;(function loadEnv() {
+  const envPaths = [
+    resolve(__dirname, '../.env'),
+    resolve(__dirname, '../../.env'),
+  ]
+  for (const envPath of envPaths) {
+    if (existsSync(envPath)) {
+      const lines = readFileSync(envPath, 'utf-8').split('\n')
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const eqIndex = trimmed.indexOf('=')
+        if (eqIndex === -1) continue
+        const key = trimmed.slice(0, eqIndex).trim()
+        const value = trimmed.slice(eqIndex + 1).trim()
+        if (!process.env[key]) {
+          process.env[key] = value
+        }
+      }
+      break
+    }
+  }
+})()
 
 function getPackageVersion(): string {
   try {
@@ -133,7 +175,7 @@ function isOriginAllowed(origin: string | undefined): boolean {
     }
 
     // Production: exact hostname match with HTTPS required
-    if (url.hostname === 'vibecraft.sh' && url.protocol === 'https:') {
+    if ((url.hostname === 'vibecraft.sh' || url.hostname === 'agent-empires.sh') && url.protocol === 'https:') {
       return true
     }
 
@@ -227,7 +269,7 @@ async function sendToTmuxSafe(tmuxSession: string, text: string): Promise<void> 
   validateTmuxSession(tmuxSession)
 
   // Create temp file with cryptographically secure random name
-  const tempFile = `/tmp/vibecraft-prompt-${Date.now()}-${randomBytes(16).toString('hex')}.txt`
+  const tempFile = `/tmp/agent-empires-prompt-${Date.now()}-${randomBytes(16).toString('hex')}.txt`
   writeFileSync(tempFile, text)
 
   try {
@@ -766,7 +808,7 @@ function createSession(options: CreateSessionRequest = {}): Promise<ManagedSessi
     const id = randomUUID()
     sessionCounter++
     const name = options.name || `Claude ${sessionCounter}`
-    const tmuxSession = `vibecraft-${shortId()}`
+    const tmuxSession = `agent-empires-${shortId()}`
 
     // Validate cwd to prevent command injection
     let cwd: string
@@ -835,6 +877,17 @@ function createSession(options: CreateSessionRequest = {}): Promise<ManagedSessi
       // Broadcast and persist
       broadcastSessions()
       saveSessions()
+
+      // Persist to Supabase
+      if (persistence) {
+        persistence.upsertSession(session)
+        persistence.logEvent({
+          sessionId: session.id,
+          eventType: 'deploy',
+          summary: `Deployed ${session.name}`,
+          payload: { cwd: session.cwd, source: 'manual' },
+        })
+      }
 
       resolve(session)
     })
@@ -964,8 +1017,23 @@ function checkSessionHealth(): void {
       const newStatus = isAlive ? (session.status === 'offline' ? 'idle' : session.status) : 'offline'
 
       if (session.status !== newStatus) {
+        const wasOnline = session.status !== 'offline'
         session.status = newStatus
         changed = true
+
+        // Sync status to Supabase
+        if (persistence) {
+          if (newStatus === 'offline' && wasOnline) {
+            persistence.terminateSession(session.id)
+            persistence.logEvent({
+              sessionId: session.id,
+              eventType: 'terminate',
+              summary: `${session.name} went offline`,
+            })
+          } else if (newStatus !== 'offline') {
+            persistence.updateSessionStatus(session.id, newStatus)
+          }
+        }
       }
     }
 
@@ -1043,6 +1111,14 @@ function loadSessions(): void {
         if (session.cwd) {
           gitStatusManager.track(session.id, session.cwd)
         }
+      }
+    }
+
+    // Ensure sessions have readable names (project name preferred over callsign)
+    for (const [id, session] of managedSessions) {
+      if (!session.name || session.name.startsWith('Claude ')) {
+        const cwdBase = session.cwd ? session.cwd.split('/').pop() : null
+        session.name = cwdBase || generateCallsign(id)
       }
     }
 
@@ -1276,6 +1352,74 @@ function processEvent(event: ClaudeEvent): ClaudeEvent {
   return event
 }
 
+/** Detect unit class for a newly discovered session */
+function detectUnitClass(sessionId: string, eventList: ClaudeEvent[]): string {
+  // Check recent events for a Task tool call that might have spawned this session
+  const now = Date.now()
+  const recentTaskCalls = eventList
+    .filter(e =>
+      e.type === 'pre_tool_use' &&
+      (e as PreToolUseEvent).tool === 'Task' &&
+      now - e.timestamp < 30000 &&
+      e.sessionId !== sessionId
+    ) as PreToolUseEvent[]
+
+  if (recentTaskCalls.length > 0) {
+    // This is likely a sub-agent — check for model hints
+    const lastTask = recentTaskCalls[recentTaskCalls.length - 1]
+    const input = lastTask.toolInput as Record<string, unknown>
+    const model = String(input.model || '').toLowerCase()
+    if (model.includes('haiku')) return 'recon'
+    if (model.includes('opus')) return 'command'
+    return 'operations' // default sub-agents to sonnet/operations
+  }
+
+  return 'command' // standalone sessions are command class
+}
+
+/** Detect parent session for a newly discovered session */
+function detectParentSession(sessionId: string, eventList: ClaudeEvent[]): string | undefined {
+  const now = Date.now()
+  // Look for a recent Task tool call from a different session
+  const recentTaskCalls = eventList
+    .filter(e =>
+      e.type === 'pre_tool_use' &&
+      (e as PreToolUseEvent).tool === 'Task' &&
+      now - e.timestamp < 30000 &&
+      e.sessionId !== sessionId
+    ) as PreToolUseEvent[]
+
+  if (recentTaskCalls.length > 0) {
+    const lastTask = recentTaskCalls[recentTaskCalls.length - 1]
+    // Find the managed session ID for the parent's claude session ID
+    const parentManagedId = claudeToManagedMap.get(lastTask.sessionId)
+    return parentManagedId || lastTask.sessionId
+  }
+
+  return undefined
+}
+
+/** Generate a deterministic military callsign from a session ID */
+function generateCallsign(sessionId: string): string {
+  const prefixes = [
+    'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Ghost',
+    'Havoc', 'Iron', 'Jackal', 'Kilo', 'Lima', 'Maverick', 'Neon',
+    'Omega', 'Phoenix', 'Raven', 'Sierra', 'Titan', 'Viper', 'Wolf',
+    'Apex', 'Bolt', 'Cipher', 'Dagger', 'Ember', 'Falcon', 'Gryphon',
+  ]
+  const suffixes = [
+    'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight',
+    'Nine', 'Zero', 'Prime', 'Lead', 'Wing', 'Core', 'Edge', 'Node',
+  ]
+  let hash = 0
+  for (let i = 0; i < sessionId.length; i++) {
+    hash = ((hash << 5) - hash + sessionId.charCodeAt(i)) | 0
+  }
+  const p = Math.abs(hash) % prefixes.length
+  const s = Math.abs(hash >> 8) % suffixes.length
+  return `${prefixes[p]}-${suffixes[s]}`
+}
+
 function addEvent(event: ClaudeEvent) {
   // Skip duplicates (hook writes to file AND posts to server)
   if (seenEventIds.has(event.id)) {
@@ -1300,7 +1444,43 @@ function addEvent(event: ClaudeEvent) {
   }
 
   // Update managed session status based on event
-  const managedSession = findManagedSession(event.sessionId)
+  // Auto-register unknown Claude sessions as managed sessions (hook-discovered units)
+  let managedSession = findManagedSession(event.sessionId)
+  if (!managedSession && event.sessionId && event.sessionId !== 'unknown') {
+    const id = event.sessionId
+    const cwdName = event.cwd ? event.cwd.split('/').pop() : undefined
+    const callsign = generateCallsign(id)
+    const parentId = detectParentSession(event.sessionId, events)
+    const session: ManagedSession = {
+      id,
+      name: cwdName || callsign,
+      status: 'working',
+      cwd: event.cwd || undefined,
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+      claudeSessionId: id,
+      parentSessionId: parentId,
+      source: 'hook',
+    } as any
+    ;(session as any).unitClass = detectUnitClass(event.sessionId, events)
+    managedSessions.set(id, session)
+    claudeToManagedMap.set(id, id)
+    log(`Auto-registered session from hook: ${session.name} (${id.slice(0, 12)}) [${(session as any).unitClass}]${parentId ? ` parent:${parentId.slice(0, 12)}` : ''}`)
+    managedSession = session
+    broadcastSessions()
+    saveSessions()
+
+    // Persist auto-registered session to Supabase
+    if (persistence) {
+      persistence.upsertSession(session)
+      persistence.logEvent({
+        sessionId: id,
+        eventType: 'deploy',
+        summary: `Auto-registered ${session.name}`,
+        payload: { source: 'hook', unitClass: (session as any).unitClass, parentId },
+      })
+    }
+  }
   if (managedSession) {
     const prevStatus = managedSession.status
     managedSession.lastActivity = Date.now() // Use current time for accurate timeout tracking
@@ -1311,12 +1491,56 @@ function addEvent(event: ClaudeEvent) {
       case 'pre_tool_use':
         managedSession.status = 'working'
         managedSession.currentTool = (event as PreToolUseEvent).tool
+
+        // Virtual sub-agent: when parent fires an Agent tool, spawn a temporary unit
+        if ((event as PreToolUseEvent).tool === 'Agent') {
+          const preEvt = event as PreToolUseEvent
+          const input = preEvt.toolInput as Record<string, unknown>
+          const desc = String(input.description || input.prompt || '').slice(0, 60)
+          const subId = `${event.sessionId}-sub-${preEvt.toolUseId}`
+          const subSession: ManagedSession = {
+            id: subId,
+            name: desc || 'Sub-Agent',
+            status: 'working',
+            cwd: event.cwd || undefined,
+            createdAt: Date.now(),
+            lastActivity: Date.now(),
+            claudeSessionId: subId,
+            parentSessionId: managedSession.id,
+            source: 'hook',
+          } as any
+          const model = String(input.model || '').toLowerCase()
+          ;(subSession as any).unitClass = model.includes('haiku') ? 'recon' : model.includes('opus') ? 'command' : 'operations'
+          managedSessions.set(subId, subSession)
+          claudeToManagedMap.set(subId, subId)
+          log(`[SubAgent] Spawned virtual unit: ${subSession.name} (${subId.slice(0, 20)}...) parent:${managedSession.name}`)
+          broadcastSessions()
+        }
         break
 
       case 'post_tool_use':
         // Tool completed - update activity time but stay "working"
         // (Claude might be using more tools, stop event marks idle)
         managedSession.currentTool = undefined
+
+        // Virtual sub-agent: when Agent tool completes, retire the virtual unit
+        if ((event as PostToolUseEvent).tool === 'Agent') {
+          const postEvt = event as PostToolUseEvent
+          const subId = `${event.sessionId}-sub-${postEvt.toolUseId}`
+          const subSession = managedSessions.get(subId)
+          if (subSession) {
+            subSession.status = 'offline'
+            log(`[SubAgent] Completed: ${subSession.name}`)
+            broadcastSessions()
+            // Remove after 30 seconds so it fades out on the battlefield
+            setTimeout(() => {
+              managedSessions.delete(subId)
+              claudeToManagedMap.delete(subId)
+              broadcastSessions()
+              saveSessions()
+            }, 30000)
+          }
+        }
         break
 
       case 'user_prompt_submit':
@@ -1339,8 +1563,67 @@ function addEvent(event: ClaudeEvent) {
     }
   }
 
+  // Detect territory and attach to event before broadcasting
+  const territory = detectTerritory(processed)
+  const enriched = { ...processed, territory } as ClaudeEvent & { territory: string }
+
   // Broadcast to all clients
-  broadcast({ type: 'event', payload: processed })
+  broadcast({ type: 'event', payload: enriched })
+
+  // Persist event + status to Supabase (fire-and-forget)
+  if (persistence && managedSession) {
+    const sessionId = managedSession.id
+
+    switch (event.type) {
+      case 'pre_tool_use': {
+        const toolName = (event as PreToolUseEvent).tool
+        persistence.logEvent({
+          sessionId,
+          eventType: 'tool_call',
+          territory,
+          toolName,
+          summary: `Using ${toolName}`,
+        })
+        persistence.incrementSessionStats(sessionId, 'tools_invoked')
+        persistence.updateSessionStatus(sessionId, 'working', territory)
+        break
+      }
+      case 'post_tool_use': {
+        const postEvent = event as PostToolUseEvent
+        const duration = (postEvent as any).durationMs || undefined
+        persistence.logEvent({
+          sessionId,
+          eventType: 'tool_call',
+          territory,
+          toolName: postEvent.tool,
+          summary: `Completed ${postEvent.tool}`,
+          durationMs: duration,
+        })
+        break
+      }
+      case 'stop':
+      case 'session_end':
+        persistence.logEvent({
+          sessionId,
+          eventType: 'status_change',
+          territory,
+          summary: `Session ${event.type === 'session_end' ? 'ended' : 'stopped'}`,
+        })
+        persistence.updateSessionStatus(sessionId, 'idle', territory)
+        persistence.incrementSessionStats(sessionId, 'tasks_completed')
+        break
+
+      case 'user_prompt_submit':
+        persistence.logEvent({
+          sessionId,
+          eventType: 'status_change',
+          territory,
+          summary: 'Received prompt',
+        })
+        persistence.updateSessionStatus(sessionId, 'working', territory)
+        break
+    }
+  }
 }
 
 // ============================================================================
@@ -1524,6 +1807,21 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
       events: events.length,
       voiceEnabled: !!deepgramApiKey,
     }))
+    return
+  }
+
+  // Test roads — inject sample data to verify rendering
+  if (req.method === 'GET' && req.url === '/test-roads') {
+    const testRoads = [
+      { fromTerritory: 'hq', toTerritory: 'fulfillment', packetCount: 45, roadLevel: 4, lastPacketAt: new Date().toISOString() },
+      { fromTerritory: 'hq', toTerritory: 'lead-gen', packetCount: 12, roadLevel: 2, lastPacketAt: new Date().toISOString() },
+      { fromTerritory: 'fulfillment', toTerritory: 'support', packetCount: 70, roadLevel: 5, lastPacketAt: new Date().toISOString() },
+      { fromTerritory: 'lead-gen', toTerritory: 'sales', packetCount: 8, roadLevel: 2, lastPacketAt: new Date().toISOString() },
+      { fromTerritory: 'sales', toTerritory: 'fulfillment', packetCount: 25, roadLevel: 3, lastPacketAt: new Date().toISOString() },
+    ]
+    broadcast({ type: 'roads', payload: testRoads } as any)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, roads: testRoads.length }))
     return
   }
 
@@ -2026,6 +2324,252 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
   }
 
   // -------------------------------------------------------------------------
+  // Objectives API (Boss System)
+  // -------------------------------------------------------------------------
+
+  // GET /objectives — list all active objectives
+  if (req.method === 'GET' && req.url === '/objectives') {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized (no Supabase)' }))
+      return
+    }
+    objectiveManager.getObjectives().then(objectives => {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, objectives }))
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: String(err) }))
+    })
+    return
+  }
+
+  // GET /objectives/:campaignId — objectives for a campaign
+  const campaignMatch = req.url?.match(/^\/objectives\/([a-f0-9-]+)$/)
+  if (req.method === 'GET' && campaignMatch) {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized' }))
+      return
+    }
+    const campaignId = campaignMatch[1]
+    objectiveManager.getCampaignObjectives(campaignId).then(objectives => {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, objectives }))
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: String(err) }))
+    })
+    return
+  }
+
+  // POST /objectives — create new objective
+  if (req.method === 'POST' && req.url === '/objectives') {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized' }))
+      return
+    }
+    collectRequestBody(req).then(async body => {
+      try {
+        const data = JSON.parse(body)
+        if (!data.name || !data.territory || !data.hp_total) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'name, territory, hp_total required' }))
+          return
+        }
+        const objective = await objectiveManager!.createObjective(data)
+        if (objective) {
+          log(`[Objectives] Created boss: "${objective.name}" in ${objective.territory} (HP: ${objective.hp_total})`)
+          res.writeHead(201, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, objective }))
+        } else {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Failed to create objective' }))
+        }
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+      }
+    }).catch(() => {
+      res.writeHead(413, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Request body too large' }))
+    })
+    return
+  }
+
+  // Objective-specific endpoints: /objectives/:id/(hp|status|assign)
+  const objectiveActionMatch = req.url?.match(/^\/objectives\/([a-f0-9-]+)\/(hp|status|assign)$/)
+  if (objectiveActionMatch && objectiveManager) {
+    const objectiveId = objectiveActionMatch[1]
+    const action = objectiveActionMatch[2]
+
+    // PATCH /objectives/:id/hp — drain HP (sub-task completed)
+    if (req.method === 'PATCH' && action === 'hp') {
+      collectRequestBody(req).then(async body => {
+        try {
+          const { delta } = JSON.parse(body) as { delta: number }
+          if (typeof delta !== 'number') {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'delta (number) required' }))
+            return
+          }
+          const updated = await objectiveManager!.updateHP(objectiveId, delta)
+          if (updated) {
+            log(`[Objectives] HP update on "${updated.name}": ${updated.hp_remaining}/${updated.hp_total}`)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: true, objective: updated }))
+          } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'Objective not found' }))
+          }
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+        }
+      }).catch(() => {
+        res.writeHead(413, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Request body too large' }))
+      })
+      return
+    }
+
+    // PATCH /objectives/:id/status — update status
+    if (req.method === 'PATCH' && action === 'status') {
+      collectRequestBody(req).then(async body => {
+        try {
+          const { status } = JSON.parse(body) as { status: string }
+          const validStatuses = ['unassaulted', 'blocked', 'under_attack', 'stalled', 'defeated', 'archived']
+          if (!validStatuses.includes(status)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }))
+            return
+          }
+          const updated = await objectiveManager!.updateStatus(objectiveId, status)
+          if (updated) {
+            log(`[Objectives] Status update on "${updated.name}": ${status}`)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: true, objective: updated }))
+          } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'Objective not found' }))
+          }
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+        }
+      }).catch(() => {
+        res.writeHead(413, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Request body too large' }))
+      })
+      return
+    }
+
+    // POST /objectives/:id/assign — assign a session to an objective
+    if (req.method === 'POST' && action === 'assign') {
+      collectRequestBody(req).then(async body => {
+        try {
+          const { session_id } = JSON.parse(body) as { session_id: string }
+          if (!session_id) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'session_id required' }))
+            return
+          }
+          const assignment = await objectiveManager!.assignAgent(objectiveId, session_id)
+          if (assignment) {
+            log(`[Objectives] Assigned session ${session_id.slice(0, 8)} to objective ${objectiveId.slice(0, 8)}`)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: true, assignment }))
+          } else {
+            res.writeHead(500, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'Failed to assign agent' }))
+          }
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+        }
+      }).catch(() => {
+        res.writeHead(413, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Request body too large' }))
+      })
+      return
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Production Chain API (Factorio Mode)
+  // -------------------------------------------------------------------------
+
+  // GET /production/bottlenecks — all current bottlenecks across all territories
+  if (req.method === 'GET' && req.url === '/production/bottlenecks') {
+    if (!productionManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Production system not initialized (no Supabase)' }))
+      return
+    }
+    const bottlenecks = productionManager.getBottlenecks()
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, bottlenecks }))
+    return
+  }
+
+  // GET /production/:territory — full production chain with current metrics
+  const prodTerritoryMatch = req.url?.match(/^\/production\/(lead-gen|sales|fulfillment|support|retention)$/)
+  if (req.method === 'GET' && prodTerritoryMatch) {
+    if (!productionManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Production system not initialized (no Supabase)' }))
+      return
+    }
+    const territory = prodTerritoryMatch[1] as any
+    const chain = productionManager.getChainForTerritory(territory)
+    if (!chain) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: `No production chain for territory: ${territory}` }))
+      return
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, ...chain }))
+    return
+  }
+
+  // PATCH /production/:nodeId — manually update a node's metric value
+  const prodNodeMatch = req.url?.match(/^\/production\/([a-z]{2}-[a-z]+)$/)
+  if (req.method === 'PATCH' && prodNodeMatch) {
+    if (!productionManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Production system not initialized (no Supabase)' }))
+      return
+    }
+    const nodeId = prodNodeMatch[1]
+    collectRequestBody(req).then(body => {
+      try {
+        const { value } = JSON.parse(body) as { value: number }
+        if (typeof value !== 'number') {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'value (number) is required' }))
+          return
+        }
+        const updated = productionManager!.updateNodeMetric(nodeId, value)
+        if (!updated) {
+          res.writeHead(404, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: `Unknown node: ${nodeId}` }))
+          return
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, nodeId, value }))
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+      }
+    }).catch(() => {
+      res.writeHead(413, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Request body too large' }))
+    })
+    return
+  }
+
+  // -------------------------------------------------------------------------
   // Text Tiles API
   // -------------------------------------------------------------------------
 
@@ -2209,7 +2753,7 @@ function serveStaticFile(req: IncomingMessage, res: ServerResponse): void {
 // ============================================================================
 
 function main() {
-  log('Starting Vibecraft server...')
+  log('Starting Agent Empires server...')
 
   // Load Deepgram API key for voice transcription
   deepgramApiKey = loadDeepgramKey()
@@ -2233,6 +2777,62 @@ function main() {
     }
   })
   gitStatusManager.start()
+
+  // Initialize Supabase persistence
+  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_KEY
+  if (supabaseUrl && supabaseKey) {
+    persistence = new SupabasePersistence({ supabaseUrl, supabaseKey })
+    persistence.loadKnownSessions().then(() => {
+      log('[Persistence] Supabase persistence active')
+    })
+    // Initialize ObjectiveManager
+    objectiveManager = new ObjectiveManager({ supabaseUrl, supabaseKey })
+    objectiveManager.setBroadcast((type, payload) => {
+      broadcast({ type, payload } as any)
+    })
+    objectiveManager.startPolling()
+    log('[ObjectiveManager] Initialized and polling')
+
+    // Initialize ProductionDataManager (Factorio Mode)
+    productionManager = new ProductionDataManager({ supabaseUrl, supabaseKey })
+    productionManager.setBroadcast((type, payload) => {
+      broadcast({ type, payload } as any)
+    })
+    productionManager.startPolling()
+    log('[ProductionDataManager] Initialized and polling')
+  } else {
+    log('[Persistence] Skipped — SUPABASE_URL or SUPABASE_KEY not set')
+  }
+
+  // Start threat data bridge (polls Supabase for business events)
+  if (supabaseUrl && supabaseKey) {
+    const threatBridge = new ThreatDataBridge({
+      supabaseUrl,
+      supabaseKey,
+      onThreat: (event) => {
+        log(`[ThreatDataBridge] New threat: ${event.title} (${event.severity})`)
+        broadcast({ type: 'threat' as any, payload: event })
+      },
+      onThreatResolved: (id) => {
+        log(`[ThreatDataBridge] Threat resolved: ${id}`)
+        broadcast({ type: 'threat_resolved' as any, payload: { id } })
+      },
+    })
+    threatBridge.start()
+
+    // Start road aggregator (polls ae_events, writes ae_roads, broadcasts to clients)
+    const roadAggregator = new RoadAggregator({
+      supabaseUrl,
+      supabaseKey,
+      onRoadsUpdated: (roads) => {
+        broadcast({ type: 'roads', payload: roads } as any)
+      },
+    })
+    roadAggregator.start()
+  } else {
+    log('[ThreatDataBridge] Skipped — SUPABASE_URL or SUPABASE_KEY not set')
+  }
 
   // Watch for new events
   watchEventsFile()
@@ -2321,18 +2921,33 @@ function main() {
     })
   })
 
-  httpServer.listen(PORT, () => {
-    log(`Server running on port ${PORT}`)
+  httpServer.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      log(`\n  FATAL: Port ${PORT} is already in use.`)
+      log(`  Fix: pkill -f "agent-empires" or lsof -ti :${PORT} | xargs kill\n`)
+      process.exit(1)
+    }
+    throw err
+  })
+
+  httpServer.listen(PORT, DEFAULTS.HOST, () => {
+    const base = `http://${DEFAULTS.HOST}:${PORT}`
+    log(`Server running on ${base}`)
     log(``)
-    log(`Open https://vibecraft.sh to view your workshop`)
+    log(`Endpoints:`)
+    log(`  WebSocket: ws://${DEFAULTS.HOST}:${PORT}`)
+    log(`  Sessions: ${base}/sessions`)
+    log(`  Health:   ${base}/health`)
     log(``)
-    log(`Local API endpoints:`)
-    log(`  WebSocket: ws://localhost:${PORT}`)
-    log(`  Events: http://localhost:${PORT}/event`)
-    log(`  Prompt: http://localhost:${PORT}/prompt`)
-    log(`  Health: http://localhost:${PORT}/health`)
-    log(`  Stats: http://localhost:${PORT}/stats`)
-    log(`  Sessions: http://localhost:${PORT}/sessions`)
+
+    // Self-test: verify we can actually reach ourselves
+    fetch(`${base}/health`).then(r => {
+      if (r.ok) log(`[Startup] Self-test PASSED — server reachable on ${DEFAULTS.HOST}:${PORT}`)
+      else log(`[Startup] Self-test FAILED — got ${r.status} from health endpoint`)
+    }).catch(err => {
+      log(`[Startup] Self-test FAILED — cannot reach ${base}/health: ${err.message}`)
+      log(`[Startup] Check if another process is on port ${PORT}: lsof -i :${PORT}`)
+    })
 
     // Start token polling after server is ready
     startTokenPolling()

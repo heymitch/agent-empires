@@ -1,966 +1,581 @@
 /**
- * SoundManager - Synthesized sound effects for Vibecraft
+ * SoundManager - Synthesized sound effects for Agent Empires
  *
- * Uses Tone.js to generate all sounds programmatically.
- * No audio files needed - pure Web Audio synthesis.
+ * Pure Web Audio API — no external dependencies, no audio files.
+ * All sounds are short procedural tones (≤600ms) generated with
+ * oscillators and gain envelopes.
  *
- * Sound Design: "Digital" theme
- * - Clean synth tones
- * - Quick, responsive feedback
- * - Non-intrusive during coding sessions
- *
- * Architecture:
- * - Synth pooling to reduce GC pressure
- * - Automatic disposal after sounds complete
- * - Normalized volume levels for consistency
- * - Spatial audio support for positional sounds
+ * Key design rules:
+ * - Lazy AudioContext: created on first play() call after user gesture
+ * - Zero Tone.js / zero imports
+ * - localStorage persistence for volume and enabled state
  */
 
-import * as Tone from 'tone'
-import { spatialAudioContext, type SpatialSource, type SpatialMode } from './SpatialAudioContext'
-
-// ============================================
-// Volume Levels (dB)
-// ============================================
-// Use these constants for consistent loudness across sounds
-const VOL = {
-  QUIET: -20,      // Background/ambient sounds
-  SOFT: -16,       // Subtle feedback (walking, typing)
-  NORMAL: -12,     // Standard UI feedback
-  PROMINENT: -10,  // Important events (success, notifications)
-  LOUD: -8,        // Major events (zone create, errors)
-} as const
+// ============================================================================
+// Types
+// ============================================================================
 
 export type SoundName =
-  // Tools
+  // RTS feedback sounds (Agent Empires)
+  | 'command_sent'
+  | 'unit_deployed'
+  | 'unit_offline'
+  | 'threat_spawn'
+  | 'threat_critical'
+  | 'alert_ping'
+  | 'group_recall'
+  // Legacy sound names (kept for backward compatibility with other callers)
   | 'read' | 'write' | 'edit' | 'bash' | 'grep' | 'glob'
   | 'webfetch' | 'websearch' | 'task' | 'todo'
-  // Special commands
   | 'git_commit'
-  // Draw mode
   | 'clear'
-  // Tool states
   | 'success' | 'error'
-  // Movement
   | 'walking'
-  // Camera/workspace
   | 'focus'
-  // UI interactions
   | 'click' | 'modal_open' | 'modal_cancel' | 'modal_confirm'
-  | 'hover'  // Subtle tick for hex grid hover
-  // Subagents
+  | 'hover'
   | 'spawn' | 'despawn'
-  // Zones
   | 'zone_create' | 'zone_delete'
-  // Session events
   | 'prompt' | 'stop' | 'notification' | 'thinking'
-  // Voice input
   | 'voice_start' | 'voice_stop'
-  // App startup
   | 'intro'
+  | 'deploy' | 'combat_read' | 'combat_write' | 'combat_bash'
+  | 'combat_search' | 'combat_web' | 'task_complete'
+  | 'alert' | 'revenue'
 
-// Map tool names to sound names (handles aliases)
+// Kept for backward compatibility with callers that pass spatial options
+export interface SoundPlayOptions {
+  zoneId?: string
+  position?: { x: number; z: number }
+}
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+type OscType = OscillatorType  // 'sine' | 'square' | 'triangle' | 'sawtooth'
+
+/** Convert MIDI note number to Hz. A4 = MIDI 69 = 440Hz. */
+function midiToHz(midi: number): number {
+  return 440 * Math.pow(2, (midi - 69) / 12)
+}
+
+/** Note name → MIDI note number (e.g. 'C5' → 72, 'E4' → 64) */
+function noteToMidi(note: string): number {
+  const NOTES: Record<string, number> = {
+    C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3,
+    E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8,
+    A: 9, 'A#': 10, Bb: 10, B: 11,
+  }
+  const m = note.match(/^([A-G][b#]?)(\d)$/)
+  if (!m) return 69
+  return (parseInt(m[2]) + 1) * 12 + (NOTES[m[1]] ?? 0)
+}
+
+function noteToHz(note: string): number {
+  return midiToHz(noteToMidi(note))
+}
+
+// ============================================================================
+// SoundManager
+// ============================================================================
+
+// Tool name → SoundName map (legacy compatibility)
 const TOOL_SOUND_MAP: Record<string, SoundName> = {
   Read: 'read',
   Write: 'write',
   Edit: 'edit',
   Bash: 'bash',
   Grep: 'grep',
-  Glob: 'glob',        // shares grep sound
+  Glob: 'glob',
   WebFetch: 'webfetch',
-  WebSearch: 'websearch', // shares webfetch sound
+  WebSearch: 'websearch',
   Task: 'task',
   TodoWrite: 'todo',
-  NotebookEdit: 'write', // shares write sound
-  AskUserQuestion: 'notification', // uses notification sound
-}
-
-// Spatial mode for each sound
-// 'positional' = affected by distance/pan from camera
-// 'global' = always centered, full volume (celebrations, system sounds)
-const SOUND_SPATIAL_MODE: Record<SoundName, SpatialMode> = {
-  // Tools - positional (zone-specific activity)
-  read: 'positional',
-  write: 'positional',
-  edit: 'positional',
-  bash: 'positional',
-  grep: 'positional',
-  glob: 'positional',
-  webfetch: 'positional',
-  websearch: 'positional',
-  task: 'positional',
-  todo: 'positional',
-
-  // Special commands - global (want full impact)
-  git_commit: 'global',
-
-  // Draw mode - global (user is directly interacting)
-  clear: 'global',
-
-  // Tool states - positional (result of zone activity)
-  success: 'positional',
-  error: 'positional',
-
-  // Movement - positional (zone character)
-  walking: 'positional',
-
-  // Camera/workspace - global (user action)
-  focus: 'global',
-
-  // UI interactions - global (direct user interaction)
-  click: 'global',
-  modal_open: 'global',
-  modal_cancel: 'global',
-  modal_confirm: 'global',
-  hover: 'global',
-
-  // Subagents - positional (zone spawns)
-  spawn: 'positional',
-  despawn: 'positional',
-
-  // Zones - positional (zone-specific events)
-  zone_create: 'positional',
-  zone_delete: 'positional',
-
-  // Session events - positional (zone-specific)
-  prompt: 'positional',
-  stop: 'positional',
-  thinking: 'positional',
-
-  // Notification - global (system-level alert)
-  notification: 'global',
-
-  // Voice input - global (user action)
-  voice_start: 'global',
-  voice_stop: 'global',
-
-  // App startup - global
-  intro: 'global',
-}
-
-// Options for playing a sound with spatial positioning
-export interface SoundPlayOptions extends SpatialSource {
-  // zoneId?: string      // inherited from SpatialSource
-  // position?: Position2D // inherited from SpatialSource
-}
-
-// Synth configuration types
-type OscType = 'sine' | 'square' | 'triangle' | 'sawtooth'
-
-interface SynthConfig {
-  type: OscType
-  attack: number
-  decay: number
-  sustain: number
-  release: number
+  NotebookEdit: 'write',
+  AskUserQuestion: 'notification',
 }
 
 class SoundManager {
-  private initialized = false
-  private enabled = true
-  private volume = 0.7 // 0-1 (maps to master gain)
+  private ctx: AudioContext | null = null
+  private enabled: boolean
+  private volume: number  // 0–1, default 0.3
 
-  // Synth pools by oscillator type (reduces GC)
-  private synthPools: Map<OscType, Tone.Synth[]> = new Map([
-    ['sine', []],
-    ['square', []],
-    ['triangle', []],
-    ['sawtooth', []],
-  ])
+  constructor() {
+    // Restore persisted settings
+    const storedEnabled = localStorage.getItem('ae-sound-enabled')
+    const storedVolume = localStorage.getItem('ae-sound-volume')
+    this.enabled = storedEnabled !== null ? storedEnabled !== 'false' : true
+    this.volume = storedVolume !== null ? parseFloat(storedVolume) : 0.3
+  }
 
-  // Track active synths for cleanup
-  private activeSynths: Set<Tone.Synth | Tone.FMSynth | Tone.PolySynth> = new Set()
+  // --------------------------------------------------------------------------
+  // Context management
+  // --------------------------------------------------------------------------
 
-  // Pool size limits
-  private readonly MAX_POOL_SIZE = 5
+  /** Lazy-init AudioContext on first use (must be after user gesture). */
+  private ensureContext(): AudioContext {
+    if (!this.ctx) {
+      this.ctx = new AudioContext()
+    }
+    if (this.ctx.state === 'suspended') {
+      // Best-effort resume; may be blocked until user gesture
+      this.ctx.resume().catch(() => {/* ignore */})
+    }
+    return this.ctx
+  }
 
-  // Current spatial params (applied to next sound)
-  private currentSpatialVolume = 1
-
-  /**
-   * Initialize audio context. Must be called from a user gesture (click/keypress).
-   */
+  /** Legacy compat: some callers call init() explicitly. No-op here. */
   async init(): Promise<void> {
-    if (this.initialized) return
-
-    await Tone.start()
-    Tone.Destination.volume.value = Tone.gainToDb(this.volume)
-
-    // Initialize spatial audio
-    spatialAudioContext.init()
-
-    this.initialized = true
-    console.log('[SoundManager] Audio initialized (with spatial support)')
+    // AudioContext created lazily on first play() — nothing to do here
   }
 
-  /**
-   * Check if audio is ready
-   */
   isReady(): boolean {
-    return this.initialized
+    return this.ctx !== null && this.ctx.state === 'running'
   }
 
-  /**
-   * Enable/disable all sounds
-   */
+  // --------------------------------------------------------------------------
+  // Public controls
+  // --------------------------------------------------------------------------
+
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
+    localStorage.setItem('ae-sound-enabled', String(enabled))
   }
 
-  /**
-   * Check if sounds are enabled
-   */
   isEnabled(): boolean {
     return this.enabled
   }
 
-  /**
-   * Set master volume (0-1)
-   */
-  setVolume(volume: number): void {
-    this.volume = Math.max(0, Math.min(1, volume))
-    if (this.initialized) {
-      Tone.Destination.volume.value = Tone.gainToDb(this.volume)
-    }
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v))
+    localStorage.setItem('ae-sound-volume', String(this.volume))
   }
 
-  /**
-   * Get current volume (0-1)
-   */
   getVolume(): number {
     return this.volume
   }
 
-  // ============================================
-  // Spatial Audio Configuration
-  // ============================================
+  // --------------------------------------------------------------------------
+  // Legacy spatial stubs (no-op — Agent Empires doesn't use 3D audio)
+  // --------------------------------------------------------------------------
 
-  /**
-   * Set the zone position resolver for spatial audio
-   */
-  setZonePositionResolver(resolver: (zoneId: string) => { x: number; z: number } | null): void {
-    spatialAudioContext.setZonePositionResolver(resolver)
-  }
+  setSpatialEnabled(_enabled: boolean): void { /* no-op */ }
+  isSpatialEnabled(): boolean { return false }
+  setZonePositionResolver(_r: (id: string) => { x: number; z: number } | null): void { /* no-op */ }
+  setFocusedZoneResolver(_r: () => string | null): void { /* no-op */ }
+  updateListener(_x: number, _z: number, _rot: number): void { /* no-op */ }
 
-  /**
-   * Set the focused zone resolver for spatial audio
-   */
-  setFocusedZoneResolver(resolver: () => string | null): void {
-    spatialAudioContext.setFocusedZoneResolver(resolver)
-  }
+  // --------------------------------------------------------------------------
+  // Playback
+  // --------------------------------------------------------------------------
 
-  /**
-   * Update the listener position for spatial audio (call from camera updates)
-   */
-  updateListener(x: number, z: number, rotation: number): void {
-    spatialAudioContext.updateListener(x, z, rotation)
-  }
-
-  /**
-   * Enable/disable spatial audio
-   */
-  setSpatialEnabled(enabled: boolean): void {
-    spatialAudioContext.setEnabled(enabled)
-  }
-
-  /**
-   * Check if spatial audio is enabled
-   */
-  isSpatialEnabled(): boolean {
-    return spatialAudioContext.isEnabled()
-  }
-
-  // ============================================
-  // Sound Playback
-  // ============================================
-
-  /**
-   * Play a sound by name with optional spatial positioning
-   * @param name - The sound to play
-   * @param options - Optional spatial source (zoneId or position)
-   */
-  play(name: SoundName, options?: SoundPlayOptions): void {
-    if (!this.initialized || !this.enabled) return
-
-    const soundFn = this.sounds[name]
-    if (!soundFn) {
+  play(name: SoundName, _options?: SoundPlayOptions): void {
+    if (!this.enabled) return
+    const fn = this.sounds[name]
+    if (!fn) {
       console.warn(`[SoundManager] Unknown sound: ${name}`)
       return
     }
-
-    // Determine spatial mode for this sound
-    const spatialMode = SOUND_SPATIAL_MODE[name] || 'global'
-
-    // Calculate spatial params if positional and source provided
-    if (spatialMode === 'positional' && options && (options.zoneId || options.position)) {
-      const params = spatialAudioContext.applyToSound(options)
-      this.currentSpatialVolume = params.volume
-    } else {
-      // Global sound or no source - reset to center, full volume
-      spatialAudioContext.resetPanner()
-      this.currentSpatialVolume = 1
+    try {
+      fn(this.ensureContext(), this.volume)
+    } catch (e) {
+      // AudioContext blocked (no user gesture yet) — fail silently
     }
-
-    // Play the sound
-    soundFn()
-
-    // Reset for next sound
-    this.currentSpatialVolume = 1
   }
 
-  /**
-   * Play sound for a tool by tool name (e.g., "Read", "Bash")
-   * @param toolName - The tool name
-   * @param options - Optional spatial source
-   */
+  /** Legacy compat: play by tool name */
   playTool(toolName: string, options?: SoundPlayOptions): void {
-    const soundName = TOOL_SOUND_MAP[toolName]
-    if (soundName) {
-      this.play(soundName, options)
-    }
-    // Unknown tools play no sound (silent fallback)
+    const name = TOOL_SOUND_MAP[toolName]
+    if (name) this.play(name, options)
   }
 
-  /**
-   * Play success or error based on result
-   * @param success - Whether the operation succeeded
-   * @param options - Optional spatial source
-   */
+  /** Legacy compat */
   playResult(success: boolean, options?: SoundPlayOptions): void {
     this.play(success ? 'success' : 'error', options)
   }
 
-  /**
-   * Play hover sound with pitch based on distance from center
-   * @param normalizedDistance - 0 = center, 1 = edge (will be clamped)
-   *
-   * Tuning constants (easy to adjust):
-   * - BASE_NOTE: Starting pitch at center (in MIDI note number, C5 = 72)
-   * - SEMITONE_RANGE: How many semitones to add at max distance
-   */
+  /** Legacy compat: hover with distance-based pitch */
   playHover(normalizedDistance: number): void {
-    if (!this.initialized || !this.enabled) return
-
-    // === TUNING CONSTANTS ===
-    const BASE_NOTE = 72        // C5 in MIDI (center pitch)
-    const SEMITONE_RANGE = 12   // One octave higher at max distance
-
-    // Clamp to 0-1 range
-    const t = Math.max(0, Math.min(1, normalizedDistance))
-
-    // Calculate pitch: base + (distance * range)
-    const midiNote = BASE_NOTE + (t * SEMITONE_RANGE)
-    const frequency = 440 * Math.pow(2, (midiNote - 69) / 12) // A4 = 440Hz = MIDI 69
-
-    const synth = this.getSynth({ type: 'sine', attack: 0.001, decay: 0.03, sustain: 0, release: 0.02 })
-    synth.volume.value = VOL.QUIET - 6  // Extra quiet (-26dB)
-    synth.triggerAttackRelease(frequency, '64n')
-    this.releaseSynth(synth, 80)
+    if (!this.enabled) return
+    try {
+      const ctx = this.ensureContext()
+      const hz = midiToHz(72 + normalizedDistance * 12)
+      this._tone(ctx, 'sine', hz, 0.001, 0.03, this.volume * 0.15, 0)
+    } catch (_) { /* ignore */ }
   }
 
-  /**
-   * Play slider tick sound with pitch based on value
-   * @param normalizedValue - 0 = low pitch, 1 = high pitch
-   */
+  /** Legacy compat: slider tick with value-based pitch */
   playSliderTick(normalizedValue: number): void {
-    if (!this.initialized || !this.enabled) return
-
-    // === TUNING CONSTANTS ===
-    const BASE_NOTE = 60        // C4 in MIDI (low pitch at 0%)
-    const SEMITONE_RANGE = 24   // Two octaves higher at 100%
-
-    // Clamp to 0-1 range
-    const t = Math.max(0, Math.min(1, normalizedValue))
-
-    // Calculate pitch: base + (value * range)
-    const midiNote = BASE_NOTE + (t * SEMITONE_RANGE)
-    const frequency = 440 * Math.pow(2, (midiNote - 69) / 12) // A4 = 440Hz = MIDI 69
-
-    const synth = this.getSynth({ type: 'triangle', attack: 0.001, decay: 0.05, sustain: 0, release: 0.03 })
-    synth.volume.value = VOL.SOFT
-    synth.triggerAttackRelease(frequency, '32n')
-    this.releaseSynth(synth, 100)
+    if (!this.enabled) return
+    try {
+      const ctx = this.ensureContext()
+      const hz = midiToHz(60 + normalizedValue * 24)
+      this._tone(ctx, 'triangle', hz, 0.001, 0.05, this.volume * 0.25, 0)
+    } catch (_) { /* ignore */ }
   }
 
-  /**
-   * Play a chord when selecting a draw mode color
-   * Each color has its own characteristic chord
-   * @param colorIndex - 0-5 for colors, -1 for eraser
-   */
+  /** Legacy compat: color select chord */
   playColorSelect(colorIndex: number): void {
-    if (!this.initialized || !this.enabled) return
-
-    // Color chords - cool, crystalline feel to match the cool color palette
-    // Each chord is an array of frequencies
-    const COLOR_CHORDS: number[][] = [
-      [523.25, 659.25, 783.99],           // 0: Cyan - C5 major (C5, E5, G5)
-      [493.88, 622.25, 739.99],           // 1: Sky - B4 major (B4, D#5, F#5)
-      [440.00, 554.37, 659.25],           // 2: Blue - A4 major (A4, C#5, E5)
-      [392.00, 493.88, 587.33],           // 3: Indigo - G4 major (G4, B4, D5)
-      [349.23, 440.00, 523.25],           // 4: Purple - F4 major (F4, A4, C5)
-      [329.63, 415.30, 493.88],           // 5: Teal - E4 major (E4, G#4, B4)
-    ]
-
-    // Eraser gets a soft descending tone
-    if (colorIndex < 0 || colorIndex >= COLOR_CHORDS.length) {
-      const synth = this.getSynth({ type: 'triangle', attack: 0.01, decay: 0.15, sustain: 0, release: 0.1 })
-      synth.volume.value = VOL.SOFT
-      synth.triggerAttackRelease(349.23, '16n')
-      this.releaseSynth(synth, 200)
-      return
-    }
-
-    const chord = COLOR_CHORDS[colorIndex]
-    const synth = this.createDisposablePolySynth(
-      { type: 'sine', attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.3 },
-      VOL.SOFT,
-      800
-    )
-    synth.triggerAttackRelease(chord, '8n')
-  }
-
-  /**
-   * Get the output node (panner if available, otherwise destination)
-   * This routes audio through spatial processing
-   */
-  private getOutputNode(): Tone.ToneAudioNode {
-    const panner = spatialAudioContext.getPanner()
-    return panner || Tone.Destination
-  }
-
-  /**
-   * Apply spatial volume to a dB value
-   */
-  private applySpatialVolume(volumeDb: number): number {
-    // Convert spatial multiplier (0.3-1.0) to dB adjustment
-    // At 1.0 = no change, at 0.3 = about -10dB
-    const spatialDb = Tone.gainToDb(this.currentSpatialVolume)
-    return volumeDb + spatialDb
-  }
-
-  /**
-   * Get a synth from pool or create new one
-   */
-  private getSynth(config: SynthConfig): Tone.Synth {
-    const pool = this.synthPools.get(config.type)!
-    let synth = pool.pop()
-    const output = this.getOutputNode()
-
-    if (!synth) {
-      synth = new Tone.Synth({
-        oscillator: { type: config.type },
-        envelope: {
-          attack: config.attack,
-          decay: config.decay,
-          sustain: config.sustain,
-          release: config.release,
-        },
+    if (!this.enabled) return
+    try {
+      const ctx = this.ensureContext()
+      const CHORDS: number[][] = [
+        [523.25, 659.25, 783.99],
+        [493.88, 622.25, 739.99],
+        [440.00, 554.37, 659.25],
+        [392.00, 493.88, 587.33],
+        [349.23, 440.00, 523.25],
+        [329.63, 415.30, 493.88],
+      ]
+      if (colorIndex < 0 || colorIndex >= CHORDS.length) {
+        this._tone(ctx, 'triangle', 349.23, 0.01, 0.15, this.volume * 0.25, 0)
+        return
+      }
+      CHORDS[colorIndex].forEach((hz, i) => {
+        setTimeout(() => this._tone(ctx, 'sine', hz, 0.01, 0.2, this.volume * 0.25, 0), i * 20)
       })
-      synth.connect(output)
-    } else {
-      // Reconfigure existing synth
-      synth.oscillator.type = config.type
-      synth.envelope.attack = config.attack
-      synth.envelope.decay = config.decay
-      synth.envelope.sustain = config.sustain
-      synth.envelope.release = config.release
-      // Reconnect in case output changed
-      synth.disconnect()
-      synth.connect(output)
-    }
+    } catch (_) { /* ignore */ }
+  }
 
-    this.activeSynths.add(synth)
-    return synth
+  // --------------------------------------------------------------------------
+  // Core oscillator primitive
+  // --------------------------------------------------------------------------
+
+  /**
+   * Play a single synthesized tone.
+   * @param ctx      AudioContext
+   * @param type     Oscillator type
+   * @param hz       Frequency in Hz
+   * @param attack   Attack time in seconds
+   * @param decay    Decay/release time in seconds
+   * @param gain     Peak gain (0–1, already scaled by master volume)
+   * @param startOffset  Seconds from ctx.currentTime to start
+   */
+  private _tone(
+    ctx: AudioContext,
+    type: OscType,
+    hz: number,
+    attack: number,
+    decay: number,
+    gain: number,
+    startOffset: number,
+  ): void {
+    const t = ctx.currentTime + startOffset
+    const osc = ctx.createOscillator()
+    const env = ctx.createGain()
+    osc.type = type
+    osc.frequency.value = hz
+    env.gain.setValueAtTime(0, t)
+    env.gain.linearRampToValueAtTime(gain, t + attack)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay)
+    osc.connect(env)
+    env.connect(ctx.destination)
+    osc.start(t)
+    osc.stop(t + attack + decay + 0.05)
   }
 
   /**
-   * Return synth to pool after use (with delay for sound to finish)
+   * Frequency sweep: ramps from startHz to endHz over durationSec.
    */
-  private releaseSynth(synth: Tone.Synth, delayMs: number = 500): void {
-    setTimeout(() => {
-      this.activeSynths.delete(synth)
-      const type = synth.oscillator.type as OscType
-      const pool = this.synthPools.get(type)
-      if (pool && pool.length < this.MAX_POOL_SIZE) {
-        pool.push(synth)
-      } else {
-        // Pool full, dispose
-        synth.dispose()
+  private _sweep(
+    ctx: AudioContext,
+    type: OscType,
+    startHz: number,
+    endHz: number,
+    durationSec: number,
+    gain: number,
+    startOffset: number,
+  ): void {
+    const t = ctx.currentTime + startOffset
+    const osc = ctx.createOscillator()
+    const env = ctx.createGain()
+    osc.type = type
+    osc.frequency.setValueAtTime(startHz, t)
+    osc.frequency.exponentialRampToValueAtTime(endHz, t + durationSec)
+    const attack = 0.01
+    env.gain.setValueAtTime(0, t)
+    env.gain.linearRampToValueAtTime(gain, t + attack)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + durationSec)
+    osc.connect(env)
+    env.connect(ctx.destination)
+    osc.start(t)
+    osc.stop(t + durationSec + 0.05)
+  }
+
+  // --------------------------------------------------------------------------
+  // Sound definitions
+  // --------------------------------------------------------------------------
+
+  private sounds: Record<SoundName, (ctx: AudioContext, vol: number) => void> = {
+
+    // ===== RTS FEEDBACK SOUNDS =====
+
+    /**
+     * command_sent: Quick rising two-note chime (C5→E5, 80ms each)
+     */
+    command_sent: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.005, 0.075, vol * 0.7, 0)
+      this._tone(ctx, 'sine', noteToHz('E5'), 0.005, 0.075, vol * 0.7, 0.08)
+    },
+
+    /**
+     * unit_deployed: Low-to-mid sweep (150Hz→400Hz, 200ms)
+     */
+    unit_deployed: (ctx, vol) => {
+      this._sweep(ctx, 'sine', 150, 400, 0.2, vol * 0.7, 0)
+    },
+
+    /**
+     * unit_offline: Descending two-note (E4→C4, 100ms each)
+     */
+    unit_offline: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('E4'), 0.005, 0.09, vol * 0.6, 0)
+      this._tone(ctx, 'sine', noteToHz('C4'), 0.005, 0.09, vol * 0.6, 0.1)
+    },
+
+    /**
+     * threat_spawn: Sharp staccato pulse (3x 30ms bursts at 800Hz)
+     */
+    threat_spawn: (ctx, vol) => {
+      for (let i = 0; i < 3; i++) {
+        this._tone(ctx, 'square', 800, 0.002, 0.028, vol * 0.5, i * 0.06)
       }
-    }, delayMs)
-  }
+    },
 
-  /**
-   * Create and auto-dispose a one-shot synth (for complex sounds)
-   */
-  private createDisposableSynth(config: SynthConfig, volume: number): Tone.Synth {
-    const output = this.getOutputNode()
-    const synth = new Tone.Synth({
-      oscillator: { type: config.type },
-      envelope: {
-        attack: config.attack,
-        decay: config.decay,
-        sustain: config.sustain,
-        release: config.release,
-      },
-    })
-    synth.connect(output)
-    synth.volume.value = this.applySpatialVolume(volume)
-    this.activeSynths.add(synth)
-
-    // Auto-dispose after envelope completes
-    const totalTime = (config.attack + config.decay + config.release) * 1000 + 200
-    setTimeout(() => {
-      this.activeSynths.delete(synth)
-      synth.dispose()
-    }, totalTime)
-
-    return synth
-  }
-
-  /**
-   * Create and auto-dispose an FM synth
-   */
-  private createDisposableFMSynth(volume: number, disposeAfterMs: number): Tone.FMSynth {
-    const output = this.getOutputNode()
-    const synth = new Tone.FMSynth({
-      modulationIndex: 5,
-      envelope: { attack: 0.05, decay: 0.3, sustain: 0.1, release: 0.4 },
-    })
-    synth.connect(output)
-    synth.volume.value = this.applySpatialVolume(volume)
-    this.activeSynths.add(synth)
-
-    setTimeout(() => {
-      this.activeSynths.delete(synth)
-      synth.dispose()
-    }, disposeAfterMs)
-
-    return synth
-  }
-
-  /**
-   * Create and auto-dispose a poly synth
-   */
-  private createDisposablePolySynth(config: SynthConfig, volume: number, disposeAfterMs: number): Tone.PolySynth {
-    const output = this.getOutputNode()
-    const synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: config.type },
-      envelope: {
-        attack: config.attack,
-        decay: config.decay,
-        sustain: config.sustain,
-        release: config.release,
-      },
-    })
-    synth.connect(output)
-    synth.volume.value = this.applySpatialVolume(volume)
-    this.activeSynths.add(synth)
-
-    setTimeout(() => {
-      this.activeSynths.delete(synth)
-      synth.dispose()
-    }, disposeAfterMs)
-
-    return synth
-  }
-
-  /**
-   * Dispose all active synths (cleanup)
-   */
-  dispose(): void {
-    for (const synth of this.activeSynths) {
-      synth.dispose()
-    }
-    this.activeSynths.clear()
-
-    for (const pool of this.synthPools.values()) {
-      for (const synth of pool) {
-        synth.dispose()
+    /**
+     * threat_critical: Alarm — oscillating between 600Hz and 900Hz,
+     * 4 cycles over 600ms
+     */
+    threat_critical: (ctx, vol) => {
+      const cycleMs = 0.15  // 600ms / 4 cycles
+      for (let i = 0; i < 4; i++) {
+        const hz = i % 2 === 0 ? 600 : 900
+        this._tone(ctx, 'square', hz, 0.005, cycleMs - 0.01, vol * 0.55, i * cycleMs)
       }
-      pool.length = 0
-    }
-  }
-
-  // ============================================
-  // Sound Definitions
-  // ============================================
-
-  private sounds: Record<SoundName, () => void> = {
-    // === TOOLS ===
-
-    read: () => {
-      // Page turn - two soft tones
-      const synth = this.getSynth({ type: 'sine', attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 })
-      synth.volume.value = this.applySpatialVolume(VOL.NORMAL)
-      synth.triggerAttackRelease('A4', '32n')
-      setTimeout(() => synth.triggerAttackRelease('C5', '32n'), 50)
-      this.releaseSynth(synth, 300)
     },
 
-    write: () => {
-      // Keyboard typing - quick triple blip
-      const synth = this.getSynth({ type: 'square', attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 })
-      synth.volume.value = this.applySpatialVolume(VOL.QUIET)
-      synth.triggerAttackRelease('E5', '64n')
-      setTimeout(() => synth.triggerAttackRelease('E5', '64n'), 40)
-      setTimeout(() => synth.triggerAttackRelease('G5', '64n'), 80)
-      this.releaseSynth(synth, 300)
+    /**
+     * alert_ping: Single clean ping at 1200Hz, 60ms, quick decay
+     */
+    alert_ping: (ctx, vol) => {
+      this._tone(ctx, 'sine', 1200, 0.002, 0.058, vol * 0.6, 0)
     },
 
-    edit: () => {
-      // Pencil scratch - two quick taps
-      const synth = this.getSynth({ type: 'triangle', attack: 0.001, decay: 0.06, sustain: 0, release: 0.04 })
-      synth.volume.value = this.applySpatialVolume(VOL.PROMINENT)
-      synth.triggerAttackRelease('E4', '32n')
-      setTimeout(() => synth.triggerAttackRelease('G4', '32n'), 60)
-      this.releaseSynth(synth, 250)
+    /**
+     * group_recall: Quick ascending arpeggio (C4→E4→G4, 50ms each)
+     */
+    group_recall: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('C4'), 0.005, 0.045, vol * 0.65, 0)
+      this._tone(ctx, 'sine', noteToHz('E4'), 0.005, 0.045, vol * 0.65, 0.05)
+      this._tone(ctx, 'sine', noteToHz('G4'), 0.005, 0.045, vol * 0.65, 0.1)
     },
 
-    bash: () => {
-      // DataBurst - rapid blips like data transmission
-      const synth = this.getSynth({ type: 'sawtooth', attack: 0.001, decay: 0.02, sustain: 0, release: 0.02 })
-      synth.volume.value = this.applySpatialVolume(VOL.SOFT)
+    // ===== LEGACY SOUNDS (kept for backward compatibility) =====
+
+    read: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('A4'), 0.005, 0.1, vol * 0.6, 0)
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.005, 0.1, vol * 0.6, 0.05)
+    },
+
+    write: (ctx, vol) => {
+      this._tone(ctx, 'square', noteToHz('E5'), 0.001, 0.05, vol * 0.3, 0)
+      this._tone(ctx, 'square', noteToHz('E5'), 0.001, 0.05, vol * 0.3, 0.04)
+      this._tone(ctx, 'square', noteToHz('G5'), 0.001, 0.05, vol * 0.3, 0.08)
+    },
+
+    edit: (ctx, vol) => {
+      this._tone(ctx, 'triangle', noteToHz('E4'), 0.001, 0.06, vol * 0.65, 0)
+      this._tone(ctx, 'triangle', noteToHz('G4'), 0.001, 0.06, vol * 0.65, 0.06)
+    },
+
+    bash: (ctx, vol) => {
       for (let i = 0; i < 5; i++) {
-        setTimeout(() => synth.triggerAttackRelease('C5', '64n'), i * 25)
+        this._tone(ctx, 'sawtooth', noteToHz('C5'), 0.001, 0.02, vol * 0.25, i * 0.025)
       }
-      this.releaseSynth(synth, 300)
     },
 
-    grep: () => {
-      // Scanning/searching - sweep with "found it" blip
-      const synth = this.createDisposableSynth(
-        { type: 'sine', attack: 0.01, decay: 0.15, sustain: 0, release: 0.1 },
-        VOL.NORMAL
-      )
-      synth.triggerAttackRelease('E4', '16n')
-      synth.frequency.rampTo('A4', 0.12)
-
-      // Secondary "found it" blip
-      const blip = this.createDisposableSynth(
-        { type: 'triangle', attack: 0.005, decay: 0.06, sustain: 0, release: 0.05 },
-        VOL.SOFT
-      )
-      setTimeout(() => blip.triggerAttackRelease('C5', '32n'), 130)
+    grep: (ctx, vol) => {
+      this._sweep(ctx, 'sine', noteToHz('E4'), noteToHz('A4'), 0.12, vol * 0.6, 0)
+      this._tone(ctx, 'triangle', noteToHz('C5'), 0.005, 0.06, vol * 0.35, 0.13)
     },
 
-    glob: () => {
-      // Alias for grep - same searching sound
-      this.sounds.grep()
-    },
+    glob: (ctx, vol) => { this.sounds.grep(ctx, vol) },
 
-    webfetch: () => {
-      // Network request - ascending arpeggio
-      const synth = this.getSynth({ type: 'sine', attack: 0.001, decay: 0.03, sustain: 0, release: 0.02 })
-      synth.volume.value = this.applySpatialVolume(VOL.NORMAL)
-      const notes = ['C5', 'E5', 'G5', 'C6']
-      notes.forEach((note, i) => {
-        setTimeout(() => synth.triggerAttackRelease(note, '64n'), i * 40)
+    webfetch: (ctx, vol) => {
+      ['C5', 'E5', 'G5', 'C6'].forEach((n, i) => {
+        this._tone(ctx, 'sine', noteToHz(n), 0.001, 0.03, vol * 0.6, i * 0.04)
       })
-      this.releaseSynth(synth, 400)
     },
 
-    websearch: () => {
-      // Alias for webfetch
-      this.sounds.webfetch()
+    websearch: (ctx, vol) => { this.sounds.webfetch(ctx, vol) },
+
+    task: (ctx, vol) => {
+      this._sweep(ctx, 'sawtooth', noteToHz('C3'), noteToHz('C4'), 0.3, vol * 0.65, 0)
     },
 
-    task: () => {
-      // Subagent launch - FM sweep upward
-      const synth = this.createDisposableFMSynth(VOL.PROMINENT, 1000)
-      synth.triggerAttackRelease('C3', '4n')
-      synth.frequency.rampTo('C4', 0.3)
+    todo: (ctx, vol) => {
+      this._tone(ctx, 'square', noteToHz('E4'), 0.003, 0.06, vol * 0.35, 0)
+      this._tone(ctx, 'square', noteToHz('E4'), 0.003, 0.06, vol * 0.35, 0.07)
+      this._tone(ctx, 'square', noteToHz('G4'), 0.003, 0.06, vol * 0.35, 0.14)
     },
 
-    todo: () => {
-      // Checklist update - triple checkbox tick
-      const synth = this.getSynth({ type: 'square', attack: 0.003, decay: 0.06, sustain: 0, release: 0.04 })
-      synth.volume.value = this.applySpatialVolume(VOL.SOFT)
-      synth.triggerAttackRelease('E4', '32n')
-      setTimeout(() => synth.triggerAttackRelease('E4', '32n'), 70)
-      setTimeout(() => synth.triggerAttackRelease('G4', '32n'), 140)
-      this.releaseSynth(synth, 350)
+    git_commit: (ctx, vol) => {
+      ['G3', 'B3', 'D4', 'G4'].forEach((n, i) => {
+        this._tone(ctx, 'triangle', noteToHz(n), 0.02, 0.25, vol * 0.65, i * 0.08)
+      })
     },
 
-    // === SPECIAL COMMANDS ===
-
-    git_commit: () => {
-      // Git commit - satisfying "saved" fanfare with harmonic resolution
-      // Major chord arpeggio ascending then resolving (G→B→D→G)
-      const synth = this.createDisposablePolySynth(
-        { type: 'triangle', attack: 0.02, decay: 0.25, sustain: 0.15, release: 0.4 },
-        VOL.PROMINENT,
-        1200
-      )
-      const now = Tone.now()
-      synth.triggerAttackRelease('G3', '8n', now)
-      synth.triggerAttackRelease('B3', '8n', now + 0.08)
-      synth.triggerAttackRelease('D4', '8n', now + 0.16)
-      synth.triggerAttackRelease('G4', '4n', now + 0.24)  // Hold the resolution
-
-      // Subtle shimmer on top
-      const shimmer = this.createDisposableSynth(
-        { type: 'sine', attack: 0.1, decay: 0.3, sustain: 0, release: 0.3 },
-        VOL.QUIET
-      )
-      setTimeout(() => shimmer.triggerAttackRelease('D5', '8n'), 300)
+    clear: (ctx, vol) => {
+      ['G4', 'E4', 'C4'].forEach((n, i) => {
+        this._tone(ctx, 'triangle', noteToHz(n), 0.01, 0.2, vol * 0.6, i * 0.06)
+      })
     },
 
-    // === DRAW MODE ===
-
-    clear: () => {
-      // Descending sweep - satisfying "wipe" sound
-      const synth = this.createDisposablePolySynth(
-        { type: 'triangle', attack: 0.01, decay: 0.2, sustain: 0, release: 0.3 },
-        VOL.NORMAL,
-        800
-      )
-      const now = Tone.now()
-      synth.triggerAttackRelease('G4', '16n', now)
-      synth.triggerAttackRelease('E4', '16n', now + 0.06)
-      synth.triggerAttackRelease('C4', '16n', now + 0.12)
+    success: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.01, 0.15, vol * 0.75, 0)
+      this._tone(ctx, 'sine', noteToHz('G5'), 0.01, 0.2, vol * 0.75, 0.1)
     },
 
-    // === TOOL STATES ===
-
-    success: () => {
-      // Positive resolution - rising fifth
-      const synth = this.createDisposableSynth(
-        { type: 'sine', attack: 0.01, decay: 0.15, sustain: 0, release: 0.2 },
-        VOL.LOUD
-      )
-      synth.triggerAttackRelease('C5', '16n')
-      setTimeout(() => synth.triggerAttackRelease('G5', '8n'), 100)
+    error: (ctx, vol) => {
+      this._sweep(ctx, 'sawtooth', noteToHz('A2'), noteToHz('F2'), 0.15, vol * 0.65, 0)
     },
 
-    error: () => {
-      // Negative/warning - descending buzz
-      const synth = this.createDisposableSynth(
-        { type: 'sawtooth', attack: 0.01, decay: 0.15, sustain: 0, release: 0.15 },
-        VOL.PROMINENT
-      )
-      synth.triggerAttackRelease('A2', '8n')
-      synth.frequency.rampTo('F2', 0.1)
+    walking: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('D4'), 0.001, 0.03, vol * 0.2, 0)
+      this._tone(ctx, 'sine', noteToHz('D4'), 0.001, 0.03, vol * 0.2, 0.18)
     },
 
-    // === MOVEMENT ===
-
-    walking: () => {
-      // Soft footsteps - double tap
-      const synth = this.getSynth({ type: 'sine', attack: 0.001, decay: 0.03, sustain: 0, release: 0.02 })
-      synth.volume.value = this.applySpatialVolume(VOL.QUIET)
-      synth.triggerAttackRelease('D4', '64n')
-      setTimeout(() => synth.triggerAttackRelease('D4', '64n'), 180)
-      this.releaseSynth(synth, 400)
+    focus: (ctx, vol) => {
+      this._sweep(ctx, 'sine', noteToHz('E4'), noteToHz('A4'), 0.1, vol * 0.6, 0)
     },
 
-    // === CAMERA/WORKSPACE ===
-
-    focus: () => {
-      // Quick whoosh/zoom - workspace transition
-      const synth = this.createDisposableSynth(
-        { type: 'sine', attack: 0.01, decay: 0.12, sustain: 0, release: 0.08 },
-        VOL.NORMAL
-      )
-      synth.triggerAttackRelease('E4', '16n')
-      synth.frequency.exponentialRampTo('A4', 0.08)
+    click: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('G4'), 0.001, 0.08, vol * 0.6, 0)
+      this._tone(ctx, 'triangle', noteToHz('D5'), 0.001, 0.05, vol * 0.3, 0.02)
     },
 
-    // === UI INTERACTIONS ===
-
-    click: () => {
-      // Soft pop/tap - floor interaction
-      const synth = this.getSynth({ type: 'sine', attack: 0.001, decay: 0.08, sustain: 0, release: 0.06 })
-      synth.volume.value = this.applySpatialVolume(VOL.NORMAL)
-      synth.triggerAttackRelease('G4', '32n')
-
-      // Subtle harmonic
-      const harm = this.createDisposableSynth(
-        { type: 'triangle', attack: 0.001, decay: 0.05, sustain: 0, release: 0.04 },
-        VOL.QUIET
-      )
-      setTimeout(() => harm.triggerAttackRelease('D5', '64n'), 20)
-      this.releaseSynth(synth, 200)
+    modal_open: (ctx, vol) => {
+      this._sweep(ctx, 'sine', noteToHz('C4'), noteToHz('E4'), 0.1, vol * 0.6, 0)
+      this._tone(ctx, 'triangle', noteToHz('G4'), 0.005, 0.1, vol * 0.35, 0.08)
     },
 
-    modal_open: () => {
-      // Soft whoosh up - modal appearing
-      const synth = this.createDisposableSynth(
-        { type: 'sine', attack: 0.02, decay: 0.15, sustain: 0, release: 0.1 },
-        VOL.NORMAL
-      )
-      synth.triggerAttackRelease('C4', '16n')
-      synth.frequency.exponentialRampTo('E4', 0.1)
-
-      // Soft chime
-      const chime = this.createDisposableSynth(
-        { type: 'triangle', attack: 0.005, decay: 0.1, sustain: 0, release: 0.08 },
-        VOL.SOFT
-      )
-      setTimeout(() => chime.triggerAttackRelease('G4', '32n'), 80)
+    modal_cancel: (ctx, vol) => {
+      this._sweep(ctx, 'sine', noteToHz('E4'), noteToHz('C4'), 0.1, vol * 0.6, 0)
     },
 
-    modal_cancel: () => {
-      // Soft descending tone - dismissal
-      const synth = this.createDisposableSynth(
-        { type: 'sine', attack: 0.01, decay: 0.12, sustain: 0, release: 0.08 },
-        VOL.NORMAL
-      )
-      synth.triggerAttackRelease('E4', '16n')
-      synth.frequency.exponentialRampTo('C4', 0.08)
+    modal_confirm: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('E4'), 0.01, 0.1, vol * 0.65, 0)
+      this._tone(ctx, 'sine', noteToHz('G4'), 0.01, 0.1, vol * 0.65, 0.06)
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.01, 0.15, vol * 0.65, 0.12)
     },
 
-    modal_confirm: () => {
-      // Positive confirmation - ascending triad
-      const synth = this.getSynth({ type: 'sine', attack: 0.01, decay: 0.1, sustain: 0.05, release: 0.15 })
-      synth.volume.value = this.applySpatialVolume(VOL.PROMINENT)
-      synth.triggerAttackRelease('E4', '16n')
-      setTimeout(() => synth.triggerAttackRelease('G4', '16n'), 60)
-      setTimeout(() => synth.triggerAttackRelease('C5', '8n'), 120)
-      this.releaseSynth(synth, 500)
+    hover: (ctx, vol) => {
+      this._tone(ctx, 'sine', midiToHz(72), 0.001, 0.03, vol * 0.15, 0)
     },
 
-    hover: () => {
-      // Default hover - use playHover() for distance-based pitch
-      this.playHover(0)
+    spawn: (ctx, vol) => {
+      this._sweep(ctx, 'sine', noteToHz('C4'), noteToHz('G5'), 0.15, vol * 0.75, 0)
     },
 
-    // === SUBAGENTS ===
-
-    spawn: () => {
-      // Ethereal rise - ascending sweep
-      const synth = this.createDisposableSynth(
-        { type: 'sine', attack: 0.02, decay: 0.2, sustain: 0, release: 0.2 },
-        VOL.LOUD
-      )
-      synth.triggerAttackRelease('C4', '16n')
-      synth.frequency.exponentialRampTo('G5', 0.15)
+    despawn: (ctx, vol) => {
+      this._sweep(ctx, 'sine', noteToHz('G4'), noteToHz('C3'), 0.2, vol * 0.65, 0)
     },
 
-    despawn: () => {
-      // Ethereal vanish - descending sweep
-      const synth = this.createDisposableSynth(
-        { type: 'sine', attack: 0.01, decay: 0.25, sustain: 0, release: 0.2 },
-        VOL.PROMINENT
-      )
-      synth.triggerAttackRelease('G4', '16n')
-      synth.frequency.exponentialRampTo('C3', 0.2)
+    zone_create: (ctx, vol) => {
+      ['C4', 'E4', 'G4', 'C5'].forEach((n, i) => {
+        this._tone(ctx, 'sine', noteToHz(n), 0.05, 0.4, vol * 0.75, i * 0.05)
+      })
     },
 
-    // === ZONES ===
-
-    zone_create: () => {
-      // Grand expansion - rising staggered chord
-      const synth = this.createDisposablePolySynth(
-        { type: 'sine', attack: 0.05, decay: 0.4, sustain: 0.1, release: 0.3 },
-        VOL.LOUD,
-        1000
-      )
-      const now = Tone.now()
-      synth.triggerAttackRelease('C4', '8n', now)
-      synth.triggerAttackRelease('E4', '8n', now + 0.05)
-      synth.triggerAttackRelease('G4', '8n', now + 0.1)
-      synth.triggerAttackRelease('C5', '8n', now + 0.15)
+    zone_delete: (ctx, vol) => {
+      ['G4', 'Eb4', 'C4', 'G3'].forEach((n, i) => {
+        this._tone(ctx, 'triangle', noteToHz(n), 0.01, 0.3, vol * 0.65, i * 0.08)
+      })
     },
 
-    zone_delete: () => {
-      // Collapse/fade - descending minor
-      const synth = this.createDisposablePolySynth(
-        { type: 'triangle', attack: 0.01, decay: 0.3, sustain: 0, release: 0.4 },
-        VOL.PROMINENT,
-        800
-      )
-      const now = Tone.now()
-      synth.triggerAttackRelease('G4', '16n', now)
-      synth.triggerAttackRelease('Eb4', '16n', now + 0.08)
-      synth.triggerAttackRelease('C4', '16n', now + 0.16)
-      synth.triggerAttackRelease('G3', '8n', now + 0.24)
+    prompt: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('G4'), 0.01, 0.1, vol * 0.6, 0)
+      this._tone(ctx, 'sine', noteToHz('D5'), 0.01, 0.1, vol * 0.6, 0.06)
     },
 
-    // === SESSION EVENTS ===
-
-    prompt: () => {
-      // User submitted - gentle acknowledgment
-      const synth = this.getSynth({ type: 'sine', attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 })
-      synth.volume.value = this.applySpatialVolume(VOL.NORMAL)
-      synth.triggerAttackRelease('G4', '32n')
-      setTimeout(() => synth.triggerAttackRelease('D5', '32n'), 60)
-      this.releaseSynth(synth, 300)
+    stop: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('E4'), 0.01, 0.2, vol * 0.65, 0)
+      this._tone(ctx, 'sine', noteToHz('G4'), 0.01, 0.2, vol * 0.65, 0.08)
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.01, 0.25, vol * 0.65, 0.16)
     },
 
-    stop: () => {
-      // Claude finished - satisfying completion chord
-      const synth = this.getSynth({ type: 'sine', attack: 0.01, decay: 0.2, sustain: 0, release: 0.25 })
-      synth.volume.value = this.applySpatialVolume(VOL.PROMINENT)
-      synth.triggerAttackRelease('E4', '16n')
-      setTimeout(() => synth.triggerAttackRelease('G4', '16n'), 80)
-      setTimeout(() => synth.triggerAttackRelease('C5', '8n'), 160)
-      this.releaseSynth(synth, 600)
+    notification: (ctx, vol) => {
+      this._tone(ctx, 'triangle', noteToHz('A4'), 0.005, 0.12, vol * 0.65, 0)
+      this._tone(ctx, 'triangle', noteToHz('A4'), 0.005, 0.12, vol * 0.65, 0.12)
     },
 
-    notification: () => {
-      // Attention ping - double tap
-      const synth = this.getSynth({ type: 'triangle', attack: 0.005, decay: 0.12, sustain: 0, release: 0.1 })
-      synth.volume.value = this.applySpatialVolume(VOL.PROMINENT)
-      synth.triggerAttackRelease('A4', '16n')
-      setTimeout(() => synth.triggerAttackRelease('A4', '16n'), 120)
-      this.releaseSynth(synth, 400)
+    thinking: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('D4'), 0.05, 0.15, vol * 0.25, 0)
+      this._tone(ctx, 'sine', noteToHz('F4'), 0.08, 0.2, vol * 0.2, 0.1)
     },
 
-    thinking: () => {
-      // Claude processing - subtle ambient
-      const synth = this.createDisposableSynth(
-        { type: 'sine', attack: 0.05, decay: 0.15, sustain: 0.1, release: 0.2 },
-        VOL.QUIET
-      )
-      synth.triggerAttackRelease('D4', '8n')
-
-      const synth2 = this.createDisposableSynth(
-        { type: 'sine', attack: 0.08, decay: 0.2, sustain: 0, release: 0.15 },
-        VOL.QUIET - 2
-      )
-      setTimeout(() => synth2.triggerAttackRelease('F4', '8n'), 100)
+    voice_start: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.005, 0.08, vol * 0.65, 0)
+      this._tone(ctx, 'sine', noteToHz('E5'), 0.005, 0.08, vol * 0.65, 0.06)
     },
 
-    // === VOICE INPUT ===
-
-    voice_start: () => {
-      // Recording started - ascending ready beep
-      const synth = this.getSynth({ type: 'sine', attack: 0.005, decay: 0.08, sustain: 0, release: 0.08 })
-      synth.volume.value = this.applySpatialVolume(VOL.PROMINENT)
-      synth.triggerAttackRelease('C5', '32n')
-      setTimeout(() => synth.triggerAttackRelease('E5', '32n'), 60)
-      this.releaseSynth(synth, 250)
+    voice_stop: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('E5'), 0.005, 0.08, vol * 0.65, 0)
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.005, 0.08, vol * 0.65, 0.06)
     },
 
-    voice_stop: () => {
-      // Recording stopped - descending done beep
-      const synth = this.getSynth({ type: 'sine', attack: 0.005, decay: 0.08, sustain: 0, release: 0.08 })
-      synth.volume.value = this.applySpatialVolume(VOL.PROMINENT)
-      synth.triggerAttackRelease('E5', '32n')
-      setTimeout(() => synth.triggerAttackRelease('C5', '32n'), 60)
-      this.releaseSynth(synth, 250)
+    intro: (ctx, vol) => {
+      // Cmaj9 bloom: C3, B3, E4, G4, D5
+      ['C3', 'B3', 'E4', 'G4', 'D5'].forEach((n, i) => {
+        this._tone(ctx, 'triangle', noteToHz(n), 0.08, 0.8, vol * 0.6, i * 0.05)
+      })
     },
 
-    // === APP STARTUP ===
+    deploy: (ctx, vol) => {
+      this._sweep(ctx, 'sawtooth', noteToHz('C2'), noteToHz('C4'), 0.3, vol * 0.75, 0)
+    },
 
-    intro: () => {
-      // Jazz welcome - Cmaj9 (Drop 2 voicing)
-      // Relaxed, inviting bloom that says "time to build"
-      const synth = this.createDisposablePolySynth(
-        { type: 'triangle', attack: 0.08, decay: 0.4, sustain: 0.3, release: 0.8 },
-        VOL.PROMINENT,
-        2000
-      )
+    combat_read: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('A5'), 0.001, 0.04, vol * 0.6, 0)
+    },
 
-      const now = Tone.now()
+    combat_write: (ctx, vol) => {
+      this._tone(ctx, 'square', noteToHz('E5'), 0.001, 0.03, vol * 0.35, 0)
+      this._tone(ctx, 'square', noteToHz('G5'), 0.001, 0.03, vol * 0.35, 0.03)
+      this._tone(ctx, 'square', noteToHz('A5'), 0.001, 0.03, vol * 0.35, 0.06)
+    },
 
-      // Cmaj9 (Drop 2): C3, B3, E4, G4, D5
-      synth.triggerAttackRelease('C3', '2n', now)
-      synth.triggerAttackRelease('B3', '2n', now + 0.05)
-      synth.triggerAttackRelease('E4', '2n', now + 0.1)
-      synth.triggerAttackRelease('G4', '2n', now + 0.15)
-      synth.triggerAttackRelease('D5', '2n', now + 0.2)
+    combat_bash: (ctx, vol) => {
+      this._sweep(ctx, 'sawtooth', noteToHz('C2'), noteToHz('C2'), 0.15, vol * 0.65, 0)
+      this._tone(ctx, 'square', noteToHz('C3'), 0.001, 0.05, vol * 0.35, 0.04)
+    },
+
+    combat_search: (ctx, vol) => {
+      this._sweep(ctx, 'sine', noteToHz('E5'), noteToHz('A5'), 0.18, vol * 0.6, 0)
+    },
+
+    combat_web: (ctx, vol) => {
+      ['C5', 'E5', 'G5', 'B5', 'C6'].forEach((n, i) => {
+        this._tone(ctx, 'sine', noteToHz(n), 0.001, 0.02, vol * 0.6, i * 0.03)
+      })
+    },
+
+    task_complete: (ctx, vol) => {
+      this._tone(ctx, 'square', noteToHz('C5'), 0.01, 0.12, vol * 0.65, 0)
+      this._tone(ctx, 'square', noteToHz('E5'), 0.01, 0.12, vol * 0.65, 0.1)
+      this._tone(ctx, 'square', noteToHz('G5'), 0.01, 0.15, vol * 0.65, 0.2)
+    },
+
+    alert: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('E5'), 0.005, 0.15, vol * 0.65, 0)
+      this._tone(ctx, 'sine', noteToHz('E5'), 0.005, 0.15, vol * 0.65, 0.15)
+    },
+
+    revenue: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('E6'), 0.001, 0.08, vol * 0.65, 0)
+      this._tone(ctx, 'sine', noteToHz('A5'), 0.001, 0.08, vol * 0.65, 0)
+      this._tone(ctx, 'triangle', noteToHz('C6'), 0.01, 0.2, vol * 0.35, 0.05)
     },
   }
 }

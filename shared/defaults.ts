@@ -1,5 +1,5 @@
 /**
- * Vibecraft - Central Configuration Defaults
+ * Agent Empires - Central Configuration Defaults
  *
  * Single source of truth for default values.
  * Environment variables override these defaults.
@@ -12,19 +12,22 @@ export const DEFAULTS = {
   /** Vite dev server port */
   CLIENT_PORT: 4002,
 
+  /** Bind address — 127.0.0.1 avoids IPv6 resolution issues on macOS */
+  HOST: '127.0.0.1',
+
   /**
    * Events file path.
-   * Uses ~/.vibecraft/ to ensure consistent location regardless of
-   * how vibecraft was installed (npx, global npm, local dev).
+   * Uses ~/.agent-empires/ to ensure consistent location regardless of
+   * how agent-empires was installed (npx, global npm, local dev).
    * The ~ is expanded by the server at runtime.
    */
-  EVENTS_FILE: '~/.vibecraft/data/events.jsonl',
+  EVENTS_FILE: '~/.agent-empires/data/events.jsonl',
 
   /**
    * Sessions file path.
-   * Uses ~/.vibecraft/ for consistency across installations.
+   * Uses ~/.agent-empires/ for consistency across installations.
    */
-  SESSIONS_FILE: '~/.vibecraft/data/sessions.json',
+  SESSIONS_FILE: '~/.agent-empires/data/sessions.json',
 
   /** Max events to keep in memory */
   MAX_EVENTS: 1000,

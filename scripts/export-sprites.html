@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Empires — Sprite Export Pipeline</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-void: #0a0a0f;
+            --bg-surface: #12121a;
+            --bg-elevated: #1a1a2e;
+            --accent-primary: #00ffcc;
+            --accent-danger: #ff3366;
+            --accent-warning: #ffaa00;
+            --text-primary: #e0e0e0;
+            --text-secondary: #808090;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--bg-surface);
+            border-bottom: 1px solid rgba(0,255,204,0.15);
+            padding: 16px 24px;
+        }
+        .header h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 18px;
+            color: var(--accent-primary);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        .header .subtitle {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        .main {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        .panel {
+            background: var(--bg-surface);
+            border: 1px solid rgba(0,255,204,0.1);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .panel h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            color: var(--accent-primary);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+        .file-select {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .file-card {
+            background: var(--bg-elevated);
+            border: 1px solid rgba(0,255,204,0.15);
+            border-radius: 6px;
+            padding: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .file-card:hover {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 12px rgba(0,255,204,0.15);
+        }
+        .file-card.selected {
+            border-color: var(--accent-primary);
+            background: rgba(0,255,204,0.08);
+        }
+        .file-card .icon {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .file-card .name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-primary);
+        }
+        .file-card .desc {
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        .btn {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 10px 20px;
+            border: 1px solid rgba(0,255,204,0.3);
+            border-radius: 4px;
+            background: var(--bg-elevated);
+            color: var(--accent-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            background: rgba(0,255,204,0.1);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 10px rgba(0,255,204,0.2);
+        }
+        .btn.primary {
+            background: rgba(0,255,204,0.15);
+            border-color: var(--accent-primary);
+            font-size: 13px;
+            padding: 12px 28px;
+        }
+        .btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        .btn-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .log {
+            background: var(--bg-void);
+            border: 1px solid rgba(0,255,204,0.08);
+            border-radius: 4px;
+            padding: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 12px;
+        }
+        .log .ok { color: var(--accent-primary); }
+        .log .warn { color: var(--accent-warning); }
+        .log .err { color: var(--accent-danger); }
+        .log .info { color: var(--text-secondary); }
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--bg-elevated);
+            border-radius: 2px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: var(--accent-primary);
+            border-radius: 2px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+        .preview-area {
+            margin-top: 16px;
+            text-align: center;
+        }
+        .preview-area canvas {
+            max-width: 100%;
+            border: 1px solid rgba(0,255,204,0.1);
+            border-radius: 4px;
+        }
+        .sprite-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .sprite-item {
+            background: var(--bg-elevated);
+            border: 1px solid rgba(0,255,204,0.08);
+            border-radius: 4px;
+            padding: 8px;
+            text-align: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+        .sprite-item canvas {
+            display: block;
+            margin: 0 auto 4px;
+            image-rendering: pixelated;
+        }
+        #hidden-frame {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+            width: 2000px;
+            height: 2000px;
+            border: none;
+        }
+        .option-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .option-row label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        .option-row input[type="number"] {
+            width: 60px;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(0,255,204,0.2);
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent-primary);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Sprite Export Pipeline</h1>
+        <div class="subtitle">Load sprite HTML files // Export individual PNGs + PixiJS sprite atlas JSON</div>
+    </div>
+
+    <div class="main">
+        <!-- Step 1: Select sprite file -->
+        <div class="panel">
+            <h2>1. Select Sprite File</h2>
+            <div class="file-select">
+                <div class="file-card" onclick="selectFile('unit-sprites')" id="card-unit-sprites">
+                    <div class="icon">&#9876;</div>
+                    <div class="name">unit-sprites.html</div>
+                    <div class="desc">Units with idle/working states</div>
+                </div>
+                <div class="file-card" onclick="selectFile('boss-buildings')" id="card-boss-buildings">
+                    <div class="icon">&#9960;</div>
+                    <div class="name">boss-buildings.html</div>
+                    <div class="desc">6 buildings x 5 damage states</div>
+                </div>
+                <div class="file-card" onclick="selectFile('ability-icons')" id="card-ability-icons">
+                    <div class="icon">&#10026;</div>
+                    <div class="name">ability-icons.html</div>
+                    <div class="desc">Unit ability icon set</div>
+                </div>
+                <div class="file-card" onclick="selectFile('terrain-tiles')" id="card-terrain-tiles">
+                    <div class="icon">&#9878;</div>
+                    <div class="name">terrain-tiles.html</div>
+                    <div class="desc">Map terrain tile set</div>
+                </div>
+            </div>
+            <div class="btn-row">
+                <button class="btn" onclick="loadFile()" id="btn-load" disabled>LOAD SELECTED FILE</button>
+                <span id="load-status" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary)"></span>
+            </div>
+        </div>
+
+        <!-- Step 2: Configure & Extract -->
+        <div class="panel" id="panel-extract" style="display:none">
+            <h2>2. Extract Sprites</h2>
+            <div class="option-row">
+                <label>SEED:</label>
+                <input type="number" id="export-seed" value="42" min="1">
+                <label>PADDING:</label>
+                <input type="number" id="export-padding" value="1" min="0" max="8">
+            </div>
+            <div class="btn-row">
+                <button class="btn primary" onclick="extractSprites()">EXTRACT ALL SPRITES</button>
+            </div>
+            <div class="progress-bar"><div class="fill" id="extract-progress"></div></div>
+            <div class="log" id="extract-log"></div>
+        </div>
+
+        <!-- Step 3: Preview -->
+        <div class="panel" id="panel-preview" style="display:none">
+            <h2>3. Preview Extracted Sprites</h2>
+            <div class="sprite-list" id="sprite-list"></div>
+        </div>
+
+        <!-- Step 4: Export -->
+        <div class="panel" id="panel-export" style="display:none">
+            <h2>4. Export</h2>
+            <div class="btn-row">
+                <button class="btn primary" onclick="exportSpriteSheet()">DOWNLOAD SPRITE SHEET + ATLAS (ZIP)</button>
+                <button class="btn" onclick="exportIndividualPNGs()">DOWNLOAD INDIVIDUAL PNGs (ZIP)</button>
+                <button class="btn" onclick="exportAtlasJSON()">DOWNLOAD ATLAS JSON ONLY</button>
+            </div>
+            <div class="preview-area" id="sheet-preview"></div>
+            <div class="log" id="export-log"></div>
+        </div>
+    </div>
+
+    <!-- Hidden iframe for loading sprite files -->
+    <iframe id="hidden-frame"></iframe>
+
+    <script>
+    // =========================================================================
+    // STATE
+    // =========================================================================
+    let selectedFile = null;
+    let loadedIframe = null;
+    let extractedSprites = []; // { name, canvas, width, height, bossScale? }
+    let spriteSheetCanvas = null;
+    let atlasJSON = null;
+
+    // Sprite file configurations: how to find and name sprites in each file
+    const SPRITE_CONFIGS = {
+        'unit-sprites': {
+            path: '../assets/sprites/unit-sprites.html',
+            // Unit sprites use a sidebar + canvas grid layout
+            // We'll parse the p5 canvas directly
+            type: 'p5-grid',
+            cellSize: 128,
+            getSprites: function(srcCanvas) {
+                return extractGridSprites(srcCanvas, this);
+            }
+        },
+        'boss-buildings': {
+            path: '../assets/sprites/boss-buildings.html',
+            type: 'p5-grid',
+            cellSize: 192,
+            labelWidth: 130,
+            padding: 4,
+            rows: 6,
+            cols: 5,
+            rowNames: ['hq', 'lead-gen', 'sales', 'fulfillment', 'support', 'retention'],
+            colNames: ['100', '75', '50', '25', '0'],
+            // Boss scale metadata
+            scaleTiers: [
+                { name: 'small',  maxHP: 3,  size: 128 },
+                { name: 'medium', maxHP: 8,  size: 192 },
+                { name: 'large',  maxHP: 15, size: 256 },
+                { name: 'mega',   maxHP: 999, size: 320 }
+            ],
+            getSprites: function(srcCanvas) {
+                return extractBossSprites(srcCanvas, this);
+            }
+        },
+        'ability-icons': {
+            path: '../assets/sprites/ability-icons.html',
+            type: 'canvas-grid',
+            getSprites: function(srcCanvas) {
+                return extractAbilityIcons(srcCanvas);
+            }
+        },
+        'terrain-tiles': {
+            path: '../assets/sprites/terrain-tiles.html',
+            type: 'p5-grid',
+            getSprites: function(srcCanvas) {
+                return extractTerrainTiles(srcCanvas);
+            }
+        }
+    };
+
+    // =========================================================================
+    // FILE SELECTION
+    // =========================================================================
+    function selectFile(name) {
+        document.querySelectorAll('.file-card').forEach(c => c.classList.remove('selected'));
+        document.getElementById('card-' + name).classList.add('selected');
+        selectedFile = name;
+        document.getElementById('btn-load').disabled = false;
+        document.getElementById('load-status').textContent = '';
+    }
+
+    function loadFile() {
+        if (!selectedFile) return;
+        let config = SPRITE_CONFIGS[selectedFile];
+        let status = document.getElementById('load-status');
+        status.textContent = 'Loading ' + selectedFile + '.html ...';
+
+        let iframe = document.getElementById('hidden-frame');
+        iframe.onload = function() {
+            // Wait for p5.js to render
+            setTimeout(() => {
+                loadedIframe = iframe;
+                status.textContent = 'Loaded! Ready to extract.';
+                status.style.color = 'var(--accent-primary)';
+                document.getElementById('panel-extract').style.display = 'block';
+                log('extract-log', 'ok', 'File loaded: ' + selectedFile + '.html');
+
+                // Try to find canvas
+                let doc = iframe.contentDocument || iframe.contentWindow.document;
+                let canvases = doc.querySelectorAll('canvas');
+                log('extract-log', 'info', 'Found ' + canvases.length + ' canvas element(s)');
+                for (let i = 0; i < canvases.length; i++) {
+                    log('extract-log', 'info', '  Canvas #' + i + ': ' + canvases[i].width + 'x' + canvases[i].height);
+                }
+            }, 1500);
+        };
+        iframe.onerror = function() {
+            status.textContent = 'Error loading file. Make sure the file exists at: ' + config.path;
+            status.style.color = 'var(--accent-danger)';
+        };
+        iframe.src = config.path;
+    }
+
+    // =========================================================================
+    // LOGGING
+    // =========================================================================
+    function log(targetId, type, msg) {
+        let el = document.getElementById(targetId);
+        let span = document.createElement('span');
+        span.className = type;
+        span.textContent = msg + '\n';
+        el.appendChild(span);
+        el.scrollTop = el.scrollHeight;
+    }
+
+    // =========================================================================
+    // SPRITE EXTRACTION
+    // =========================================================================
+    function extractSprites() {
+        if (!loadedIframe || !selectedFile) return;
+        let config = SPRITE_CONFIGS[selectedFile];
+        let doc = loadedIframe.contentDocument || loadedIframe.contentWindow.document;
+        let canvases = doc.querySelectorAll('canvas');
+
+        if (canvases.length === 0) {
+            log('extract-log', 'err', 'No canvas found in loaded file');
+            return;
+        }
+
+        // Set seed if the loaded file supports it
+        try {
+            let seedInput = doc.getElementById('seed-input');
+            let exportSeed = parseInt(document.getElementById('export-seed').value) || 42;
+            if (seedInput) {
+                seedInput.value = exportSeed;
+                // Trigger the seed update function
+                let win = loadedIframe.contentWindow;
+                if (win.updateSeed) win.updateSeed();
+                else if (win.renderAll) { win.currentSeed = exportSeed; win.renderAll(); }
+                log('extract-log', 'ok', 'Set seed to ' + exportSeed);
+            }
+        } catch(e) {
+            log('extract-log', 'warn', 'Could not set seed: ' + e.message);
+        }
+
+        // Wait for re-render, then extract
+        setTimeout(() => {
+            // Re-grab canvases after potential re-render
+            canvases = doc.querySelectorAll('canvas');
+
+            // Pick the main/largest canvas
+            let srcCanvas = canvases[0];
+            for (let c of canvases) {
+                if (c.width * c.height > srcCanvas.width * srcCanvas.height) srcCanvas = c;
+            }
+
+            log('extract-log', 'info', 'Using canvas: ' + srcCanvas.width + 'x' + srcCanvas.height);
+
+            try {
+                extractedSprites = config.getSprites(srcCanvas);
+                log('extract-log', 'ok', 'Extracted ' + extractedSprites.length + ' sprites');
+
+                // Update progress
+                document.getElementById('extract-progress').style.width = '100%';
+
+                // Show preview
+                showPreview();
+
+                // Show export panel
+                document.getElementById('panel-export').style.display = 'block';
+            } catch(e) {
+                log('extract-log', 'err', 'Extraction failed: ' + e.message);
+                console.error(e);
+            }
+        }, 500);
+    }
+
+    // =========================================================================
+    // EXTRACTION STRATEGIES
+    // =========================================================================
+
+    // Boss buildings: 6 rows x 5 cols, with label column
+    function extractBossSprites(srcCanvas, config) {
+        let sprites = [];
+        let LW = config.labelWidth;
+        let PAD = config.padding;
+        let SW = config.cellSize;
+        let SH = config.cellSize;
+
+        for (let row = 0; row < config.rows; row++) {
+            for (let col = 0; col < config.cols; col++) {
+                let x = LW + PAD + col * (SW + PAD);
+                let y = PAD + row * (SH + PAD);
+                let name = config.rowNames[row] + '-boss-' + config.colNames[col];
+
+                let spriteCanvas = document.createElement('canvas');
+                spriteCanvas.width = SW;
+                spriteCanvas.height = SH;
+                let ctx = spriteCanvas.getContext('2d');
+                ctx.drawImage(srcCanvas, x, y, SW, SH, 0, 0, SW, SH);
+
+                sprites.push({
+                    name: name,
+                    canvas: spriteCanvas,
+                    width: SW,
+                    height: SH,
+                    // Boss scale metadata
+                    bossScale: {
+                        tiers: config.scaleTiers,
+                        hpPercent: parseInt(config.colNames[col]),
+                        buildingType: config.rowNames[row]
+                    }
+                });
+
+                log('extract-log', 'info', '  [' + (row * config.cols + col + 1) + '/' + (config.rows * config.cols) + '] ' + name);
+
+                // Update progress
+                let pct = ((row * config.cols + col + 1) / (config.rows * config.cols)) * 100;
+                document.getElementById('extract-progress').style.width = pct + '%';
+            }
+        }
+        return sprites;
+    }
+
+    // Generic grid extraction for unit sprites and terrain tiles
+    function extractGridSprites(srcCanvas, config) {
+        let sprites = [];
+        let cw = srcCanvas.width;
+        let ch = srcCanvas.height;
+        let sz = config.cellSize;
+
+        // Try to detect grid layout by scanning for cell boundaries
+        // For unit-sprites, the layout has a sidebar (320px) + grid
+        // We'll try to auto-detect by looking for the p5 canvas area
+
+        // Heuristic: look for repeating cell patterns
+        // For now, use a simple grid scan approach
+        let startX = 0;
+        let startY = 0;
+
+        // Check if there's a label column (sidebar)
+        // Unit sprites have a sidebar at ~320px
+        if (cw > 800) {
+            // Likely has sidebar, start scanning from right portion
+            // We'll scan the whole canvas and extract non-empty cells
+        }
+
+        // Scan in grid cells
+        let cols = Math.floor(cw / sz);
+        let rows = Math.floor(ch / sz);
+
+        let idx = 0;
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                let x = col * sz;
+                let y = row * sz;
+
+                // Check if this cell has any content (not just background)
+                let spriteCanvas = document.createElement('canvas');
+                spriteCanvas.width = sz;
+                spriteCanvas.height = sz;
+                let ctx = spriteCanvas.getContext('2d');
+                ctx.drawImage(srcCanvas, x, y, sz, sz, 0, 0, sz, sz);
+
+                // Check if cell is non-empty
+                let data = ctx.getImageData(0, 0, sz, sz).data;
+                let hasContent = false;
+                for (let i = 0; i < data.length; i += 16) {
+                    if (data[i + 3] > 20 && (data[i] > 30 || data[i+1] > 30 || data[i+2] > 30)) {
+                        hasContent = true;
+                        break;
+                    }
+                }
+
+                if (hasContent) {
+                    let name = 'sprite-r' + row + '-c' + col;
+                    sprites.push({
+                        name: name,
+                        canvas: spriteCanvas,
+                        width: sz,
+                        height: sz
+                    });
+                    idx++;
+                }
+            }
+        }
+
+        log('extract-log', 'info', 'Grid scan: ' + cols + ' cols x ' + rows + ' rows, found ' + sprites.length + ' non-empty cells');
+        return sprites;
+    }
+
+    // Ability icons: these use individual canvas elements per icon (not p5 grid)
+    function extractAbilityIcons(srcCanvas) {
+        let sprites = [];
+        let doc = loadedIframe.contentDocument || loadedIframe.contentWindow.document;
+
+        // Ability icons file uses individual <canvas> per icon, not a single p5 canvas
+        // Find all canvases in the document
+        let allCanvases = doc.querySelectorAll('canvas');
+
+        // Also check for any data attributes or labels near canvases
+        let unitSections = doc.querySelectorAll('.unit-section, [class*="unit"], [class*="ability"]');
+
+        if (allCanvases.length > 1) {
+            // Multiple canvases = individual icon canvases
+            let idx = 0;
+            for (let canvas of allCanvases) {
+                if (canvas.width < 16 || canvas.height < 16) continue;
+
+                let name = 'ability-' + idx;
+
+                // Try to get a label from nearby elements
+                let parent = canvas.parentElement;
+                if (parent) {
+                    let label = parent.querySelector('.icon-label, .name, span, p');
+                    if (label && label.textContent.trim()) {
+                        name = label.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    }
+                }
+
+                let spriteCanvas = document.createElement('canvas');
+                spriteCanvas.width = canvas.width;
+                spriteCanvas.height = canvas.height;
+                let ctx = spriteCanvas.getContext('2d');
+                ctx.drawImage(canvas, 0, 0);
+
+                sprites.push({
+                    name: name,
+                    canvas: spriteCanvas,
+                    width: canvas.width,
+                    height: canvas.height
+                });
+                idx++;
+            }
+        } else {
+            // Single canvas — use grid extraction
+            sprites = extractGridSprites(srcCanvas, { cellSize: 64 });
+        }
+
+        log('extract-log', 'info', 'Found ' + sprites.length + ' ability icons');
+        return sprites;
+    }
+
+    // Terrain tiles
+    function extractTerrainTiles(srcCanvas) {
+        // Terrain file also uses p5 with a sidebar layout
+        // Try to detect cell size from canvas dimensions
+        let config = { cellSize: 128 }; // Default terrain tile size
+
+        let doc = loadedIframe.contentDocument || loadedIframe.contentWindow.document;
+
+        // Look for configuration hints in the script
+        let scripts = doc.querySelectorAll('script');
+        for (let s of scripts) {
+            let text = s.textContent || '';
+            let sizeMatch = text.match(/(?:TILE_?SIZE|SW|cellSize)\s*=\s*(\d+)/i);
+            if (sizeMatch) {
+                config.cellSize = parseInt(sizeMatch[1]);
+                log('extract-log', 'info', 'Detected tile size: ' + config.cellSize);
+            }
+        }
+
+        return extractGridSprites(srcCanvas, config);
+    }
+
+    // =========================================================================
+    // PREVIEW
+    // =========================================================================
+    function showPreview() {
+        document.getElementById('panel-preview').style.display = 'block';
+        let list = document.getElementById('sprite-list');
+        list.innerHTML = '';
+
+        for (let sp of extractedSprites) {
+            let item = document.createElement('div');
+            item.className = 'sprite-item';
+
+            // Scale down for preview
+            let previewSize = 64;
+            let scale = Math.min(previewSize / sp.width, previewSize / sp.height);
+            let pw = Math.round(sp.width * scale);
+            let ph = Math.round(sp.height * scale);
+
+            let previewCanvas = document.createElement('canvas');
+            previewCanvas.width = pw;
+            previewCanvas.height = ph;
+            let ctx = previewCanvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(sp.canvas, 0, 0, pw, ph);
+
+            item.appendChild(previewCanvas);
+
+            let nameEl = document.createElement('div');
+            nameEl.textContent = sp.name;
+            item.appendChild(nameEl);
+
+            let sizeEl = document.createElement('div');
+            sizeEl.textContent = sp.width + 'x' + sp.height;
+            sizeEl.style.color = 'var(--accent-primary)';
+            item.appendChild(sizeEl);
+
+            list.appendChild(item);
+        }
+    }
+
+    // =========================================================================
+    // SPRITE SHEET GENERATION
+    // =========================================================================
+    function buildSpriteSheet() {
+        if (extractedSprites.length === 0) return null;
+
+        let padding = parseInt(document.getElementById('export-padding').value) || 1;
+
+        // Sort sprites by height (descending) for better packing
+        let sorted = [...extractedSprites].sort((a, b) => b.height - a.height);
+
+        // Simple row packing algorithm
+        let maxWidth = 2048; // Max texture width
+        let rows = [];
+        let currentRow = { sprites: [], width: 0, height: 0 };
+
+        for (let sp of sorted) {
+            let w = sp.width + padding * 2;
+            let h = sp.height + padding * 2;
+
+            if (currentRow.width + w > maxWidth && currentRow.sprites.length > 0) {
+                rows.push(currentRow);
+                currentRow = { sprites: [], width: 0, height: 0 };
+            }
+
+            currentRow.sprites.push({ sprite: sp, x: currentRow.width + padding, y: padding });
+            currentRow.width += w;
+            currentRow.height = Math.max(currentRow.height, h);
+        }
+        if (currentRow.sprites.length > 0) rows.push(currentRow);
+
+        // Calculate total dimensions
+        let totalW = 0;
+        let totalH = 0;
+        for (let row of rows) {
+            if (row.width > totalW) totalW = row.width;
+            totalH += row.height;
+        }
+
+        // Round up to power of 2 for GPU compatibility
+        totalW = nextPow2(totalW);
+        totalH = nextPow2(totalH);
+
+        // Create sprite sheet canvas
+        spriteSheetCanvas = document.createElement('canvas');
+        spriteSheetCanvas.width = totalW;
+        spriteSheetCanvas.height = totalH;
+        let ctx = spriteSheetCanvas.getContext('2d');
+        // Transparent background
+        ctx.clearRect(0, 0, totalW, totalH);
+
+        // Build atlas
+        let frames = {};
+        let yOff = 0;
+
+        for (let row of rows) {
+            for (let entry of row.sprites) {
+                let sp = entry.sprite;
+                let fx = entry.x;
+                let fy = yOff + entry.y;
+
+                ctx.drawImage(sp.canvas, fx, fy);
+
+                let frameData = {
+                    frame: { x: fx, y: fy, w: sp.width, h: sp.height },
+                    sourceSize: { w: sp.width, h: sp.height },
+                    spriteSourceSize: { x: 0, y: 0, w: sp.width, h: sp.height }
+                };
+
+                // Add boss scale metadata if present
+                if (sp.bossScale) {
+                    frameData.bossScale = sp.bossScale;
+                }
+
+                frames[sp.name] = frameData;
+            }
+            yOff += row.height;
+        }
+
+        let baseName = selectedFile || 'sprites';
+        atlasJSON = {
+            frames: frames,
+            meta: {
+                app: 'Agent Empires Sprite Exporter',
+                version: '1.0.0',
+                image: baseName + '.png',
+                format: 'RGBA8888',
+                size: { w: totalW, h: totalH },
+                scale: 1
+            }
+        };
+
+        // Add boss scale tiers to meta if applicable
+        if (selectedFile === 'boss-buildings') {
+            atlasJSON.meta.bossScaleTiers = SPRITE_CONFIGS['boss-buildings'].scaleTiers;
+        }
+
+        log('export-log', 'ok', 'Sprite sheet: ' + totalW + 'x' + totalH + ' (' + Object.keys(frames).length + ' frames)');
+        log('export-log', 'info', 'Atlas JSON generated with ' + Object.keys(frames).length + ' entries');
+
+        return { canvas: spriteSheetCanvas, atlas: atlasJSON };
+    }
+
+    function nextPow2(v) {
+        v--;
+        v |= v >> 1; v |= v >> 2; v |= v >> 4; v |= v >> 8; v |= v >> 16;
+        v++;
+        return Math.max(v, 1);
+    }
+
+    // =========================================================================
+    // EXPORT FUNCTIONS
+    // =========================================================================
+    async function exportSpriteSheet() {
+        let result = buildSpriteSheet();
+        if (!result) { log('export-log', 'err', 'No sprites to export'); return; }
+
+        // Show preview
+        let previewArea = document.getElementById('sheet-preview');
+        previewArea.innerHTML = '';
+        let previewCanvas = document.createElement('canvas');
+        let maxPreview = 600;
+        let scale = Math.min(maxPreview / result.canvas.width, maxPreview / result.canvas.height, 1);
+        previewCanvas.width = Math.round(result.canvas.width * scale);
+        previewCanvas.height = Math.round(result.canvas.height * scale);
+        let pCtx = previewCanvas.getContext('2d');
+        pCtx.imageSmoothingEnabled = false;
+        // Dark background so we can see transparent sprites
+        pCtx.fillStyle = '#0a0a0f';
+        pCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+        pCtx.drawImage(result.canvas, 0, 0, previewCanvas.width, previewCanvas.height);
+        previewArea.appendChild(previewCanvas);
+
+        // Create ZIP
+        log('export-log', 'info', 'Building ZIP file...');
+        let zip = new JSZip();
+        let baseName = selectedFile || 'sprites';
+
+        // Add sprite sheet PNG
+        let pngBlob = await canvasToBlob(result.canvas);
+        zip.file(baseName + '.png', pngBlob);
+
+        // Add atlas JSON
+        let jsonStr = JSON.stringify(result.atlas, null, 2);
+        zip.file(baseName + '.json', jsonStr);
+
+        // Generate and download
+        let zipBlob = await zip.generateAsync({ type: 'blob' });
+        downloadBlob(zipBlob, baseName + '-spritesheet.zip');
+        log('export-log', 'ok', 'Downloaded: ' + baseName + '-spritesheet.zip');
+    }
+
+    async function exportIndividualPNGs() {
+        if (extractedSprites.length === 0) {
+            log('export-log', 'err', 'No sprites extracted');
+            return;
+        }
+
+        log('export-log', 'info', 'Building individual PNGs ZIP...');
+        let zip = new JSZip();
+        let baseName = selectedFile || 'sprites';
+
+        for (let sp of extractedSprites) {
+            let blob = await canvasToBlob(sp.canvas);
+            zip.file(sp.name + '.png', blob);
+        }
+
+        let zipBlob = await zip.generateAsync({ type: 'blob' });
+        downloadBlob(zipBlob, baseName + '-individual.zip');
+        log('export-log', 'ok', 'Downloaded: ' + baseName + '-individual.zip (' + extractedSprites.length + ' PNGs)');
+    }
+
+    function exportAtlasJSON() {
+        let result = buildSpriteSheet();
+        if (!result) { log('export-log', 'err', 'No sprites to export'); return; }
+
+        let jsonStr = JSON.stringify(result.atlas, null, 2);
+        let blob = new Blob([jsonStr], { type: 'application/json' });
+        let baseName = selectedFile || 'sprites';
+        downloadBlob(blob, baseName + '.json');
+        log('export-log', 'ok', 'Downloaded: ' + baseName + '.json');
+    }
+
+    // =========================================================================
+    // UTILITIES
+    // =========================================================================
+    function canvasToBlob(canvas) {
+        return new Promise(resolve => {
+            canvas.toBlob(blob => resolve(blob), 'image/png');
+        });
+    }
+
+    function downloadBlob(blob, filename) {
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    </script>
+</body>
+</html>

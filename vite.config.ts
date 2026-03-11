@@ -2,8 +2,11 @@ import { defineConfig } from 'vite'
 import { resolve } from 'path'
 import { DEFAULTS } from './shared/defaults'
 
-const clientPort = parseInt(process.env.VIBECRAFT_CLIENT_PORT ?? String(DEFAULTS.CLIENT_PORT), 10)
-const serverPort = parseInt(process.env.VIBECRAFT_PORT ?? String(DEFAULTS.SERVER_PORT), 10)
+const HOST = DEFAULTS.HOST
+const clientPort = parseInt(process.env.AGENT_EMPIRES_CLIENT_PORT ?? String(DEFAULTS.CLIENT_PORT), 10)
+const serverPort = parseInt(process.env.AGENT_EMPIRES_PORT ?? String(DEFAULTS.SERVER_PORT), 10)
+const serverOrigin = `http://${HOST}:${serverPort}`
+const serverWs = `ws://${HOST}:${serverPort}`
 
 export default defineConfig({
   resolve: {
@@ -13,18 +16,20 @@ export default defineConfig({
     },
   },
   define: {
-    // Inject default port into frontend at build time
     __VIBECRAFT_DEFAULT_PORT__: serverPort,
   },
   server: {
+    host: HOST,
     port: clientPort,
+    strictPort: true,
     proxy: {
       '/ws': {
-        target: `ws://localhost:${serverPort}`,
+        target: serverWs,
         ws: true,
       },
       '/api': {
-        target: `http://localhost:${serverPort}`,
+        target: serverOrigin,
+        changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },

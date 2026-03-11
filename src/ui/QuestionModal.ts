@@ -5,7 +5,6 @@
  * and sends responses back via the API.
  */
 
-import { soundManager } from '../audio'
 import { escapeHtml } from './FeedManager'
 import type { WorkshopScene } from '../scene/WorkshopScene'
 import type { AttentionSystem } from '../systems/AttentionSystem'
@@ -150,9 +149,9 @@ export function showQuestionModal(data: QuestionData): void {
     context?.attentionSystem?.add(data.managedSessionId)
   }
 
-  // Play notification sound
+  // Play notification sound (lazy import to avoid AudioContext before user gesture)
   if (context?.soundEnabled) {
-    soundManager.play('notification')
+    import('../audio').then(({ soundManager }) => soundManager.play('notification'))
   }
 }
 

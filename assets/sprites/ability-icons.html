@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Empires — Ability Icons</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Orbitron:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-void: #0a0a0f;
+            --bg-surface: #12121a;
+            --bg-elevated: #1a1a2e;
+            --accent-primary: #00ffcc;
+            --accent-secondary: #7b68ee;
+            --accent-gold: #ffd700;
+            --accent-danger: #ff3366;
+            --text-primary: #e0e0e0;
+            --text-secondary: #808090;
+            --font-display: 'Orbitron', monospace;
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-ui: 'Inter', sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg-void);
+            color: var(--text-primary);
+            font-family: var(--font-ui);
+            min-height: 100vh;
+            padding: 32px;
+        }
+        h1 {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            color: var(--accent-primary);
+            text-shadow: 0 0 20px rgba(0,255,204,0.3);
+            margin-bottom: 8px;
+            letter-spacing: 0.1em;
+        }
+        .subtitle {
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            margin-bottom: 32px;
+        }
+        .unit-section {
+            margin-bottom: 40px;
+        }
+        .unit-header {
+            font-family: var(--font-display);
+            font-size: 0.85rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(0,255,204,0.15);
+        }
+        .unit-header.writer { color: var(--accent-primary); }
+        .unit-header.scout { color: var(--accent-primary); }
+        .unit-header.engineer { color: var(--accent-primary); }
+        .unit-header.commander { color: var(--accent-primary); }
+        .unit-header.diplomat { color: var(--accent-primary); }
+        .icon-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .icon-cell {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+        .icon-cell:hover {
+            transform: scale(1.1);
+        }
+        .icon-cell:hover .icon-label {
+            color: var(--accent-primary);
+        }
+        .icon-wrapper {
+            position: relative;
+        }
+        .icon-label {
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            text-align: center;
+            max-width: 80px;
+            line-height: 1.3;
+            transition: color 0.15s;
+        }
+        .ability-type {
+            font-family: var(--font-mono);
+            font-size: 0.5rem;
+            padding: 1px 5px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .ability-type.basic { color: var(--accent-primary); border: 1px solid rgba(0,255,204,0.3); }
+        .ability-type.combo { color: var(--accent-secondary); border: 1px solid rgba(123,104,238,0.3); }
+        .ability-type.ultimate { color: var(--accent-gold); border: 1px solid rgba(255,215,0,0.3); }
+        .controls {
+            margin-top: 40px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 10px 20px;
+            border: 1px solid rgba(0,255,204,0.3);
+            background: var(--bg-elevated);
+            color: var(--accent-primary);
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+            letter-spacing: 0.05em;
+        }
+        .btn:hover {
+            background: rgba(0,255,204,0.1);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 10px rgba(0,255,204,0.2);
+        }
+        .btn.gold {
+            border-color: rgba(255,215,0,0.3);
+            color: var(--accent-gold);
+        }
+        .btn.gold:hover {
+            background: rgba(255,215,0,0.1);
+            border-color: var(--accent-gold);
+            box-shadow: 0 0 10px rgba(255,215,0,0.2);
+        }
+        .hotkey-badge {
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            width: 16px;
+            height: 16px;
+            background: var(--bg-void);
+            border: 1px solid rgba(0,255,204,0.4);
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: 8px;
+            color: var(--accent-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+        }
+        .hotkey-badge.ult {
+            border-color: rgba(255,215,0,0.5);
+            color: var(--accent-gold);
+        }
+        #sheet-canvas { display: none; }
+    </style>
+</head>
+<body>
+    <h1>ABILITY ICONS</h1>
+    <div class="subtitle">Agent Empires RTS Command Card &mdash; 30 abilities across 5 unit types</div>
+
+    <div id="icon-gallery"></div>
+
+    <div class="controls">
+        <button class="btn gold" onclick="downloadFullSheet()">Download Full Icon Sheet (PNG)</button>
+        <button class="btn" onclick="downloadAllIndividual()">Download All Individual (ZIP-like batch)</button>
+    </div>
+    <div style="margin-top:12px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.6rem;">
+        Click any icon to download it individually. Full sheet exports all 30 in a labeled grid.
+    </div>
+
+    <canvas id="sheet-canvas"></canvas>
+
+    <script>
+    // =========================================================================
+    // SEEDED RANDOM for reproducibility
+    // =========================================================================
+    class SeededRandom {
+        constructor(seed) { this.seed = seed; }
+        next() {
+            this.seed = (this.seed * 16807 + 0) % 2147483647;
+            return (this.seed - 1) / 2147483646;
+        }
+    }
+    const RNG = new SeededRandom(42);
+
+    // =========================================================================
+    // ICON DEFINITIONS
+    // =========================================================================
+    const ICON_SIZE = 64;
+    const BG_COLOR = '#1a1a2e';
+    const CYAN = '#00ffcc';
+    const PURPLE = '#7b68ee';
+    const GOLD = '#ffd700';
+
+    const unitTypes = [
+        {
+            name: 'Writer',
+            className: 'writer',
+            abilities: [
+                { name: 'LinkedIn Post',      type: 'basic', hotkey: 'Q', color: CYAN,   draw: drawLinkedInPost },
+                { name: 'Twitter Post',        type: 'basic', hotkey: 'W', color: CYAN,   draw: drawTwitterPost },
+                { name: 'Quality Audit',       type: 'basic', hotkey: 'E', color: CYAN,   draw: drawQualityAudit },
+                { name: 'Week Batch',          type: 'ultimate', hotkey: 'R', color: GOLD, draw: drawWeekBatch },
+                { name: 'Generate Image',      type: 'combo', hotkey: 'D', color: PURPLE, draw: drawGenerateImage },
+                { name: 'Generate Carousel',   type: 'combo', hotkey: 'F', color: PURPLE, draw: drawGenerateCarousel },
+            ]
+        },
+        {
+            name: 'Scout',
+            className: 'scout',
+            abilities: [
+                { name: 'YouTube Research',    type: 'basic', hotkey: 'Q', color: CYAN,   draw: drawYoutubeResearch },
+                { name: 'Analytics Check',     type: 'basic', hotkey: 'W', color: CYAN,   draw: drawAnalyticsCheck },
+                { name: 'Find Discussions',    type: 'basic', hotkey: 'E', color: CYAN,   draw: drawFindDiscussions },
+                { name: 'Market Sweep',        type: 'ultimate', hotkey: 'R', color: GOLD, draw: drawMarketSweep },
+                { name: 'Trend Jacking',       type: 'combo', hotkey: 'D', color: PURPLE, draw: drawTrendJacking },
+                { name: 'Channel Digest',      type: 'combo', hotkey: 'F', color: PURPLE, draw: drawChannelDigest },
+            ]
+        },
+        {
+            name: 'Engineer',
+            className: 'engineer',
+            abilities: [
+                { name: 'Create Skill',        type: 'basic', hotkey: 'Q', color: CYAN,   draw: drawCreateSkill },
+                { name: 'Build MCP Server',    type: 'basic', hotkey: 'W', color: CYAN,   draw: drawBuildMCP },
+                { name: 'Test Skill',          type: 'basic', hotkey: 'E', color: CYAN,   draw: drawTestSkill },
+                { name: 'Full Product Build',  type: 'ultimate', hotkey: 'R', color: GOLD, draw: drawFullProductBuild },
+                { name: 'Package Plugin',      type: 'combo', hotkey: 'D', color: PURPLE, draw: drawPackagePlugin },
+                { name: 'Deploy to Vercel',    type: 'combo', hotkey: 'F', color: PURPLE, draw: drawDeployVercel },
+            ]
+        },
+        {
+            name: 'Commander',
+            className: 'commander',
+            abilities: [
+                { name: 'Morning Briefing',    type: 'basic', hotkey: 'Q', color: CYAN,   draw: drawMorningBriefing },
+                { name: 'Process Queue',       type: 'basic', hotkey: 'W', color: CYAN,   draw: drawProcessQueue },
+                { name: 'EOD Report',          type: 'basic', hotkey: 'E', color: CYAN,   draw: drawEODReport },
+                { name: 'Campaign Plan',       type: 'ultimate', hotkey: 'R', color: GOLD, draw: drawCampaignPlan },
+                { name: 'Broadcast Order',     type: 'combo', hotkey: 'D', color: PURPLE, draw: drawBroadcastOrder },
+                { name: 'Task Assignment',     type: 'combo', hotkey: 'F', color: PURPLE, draw: drawTaskAssignment },
+            ]
+        },
+        {
+            name: 'Diplomat',
+            className: 'diplomat',
+            abilities: [
+                { name: 'Prep Call',           type: 'basic', hotkey: 'Q', color: CYAN,   draw: drawPrepCall },
+                { name: 'Analyze Calls',       type: 'basic', hotkey: 'W', color: CYAN,   draw: drawAnalyzeCalls },
+                { name: 'Customer Response',   type: 'basic', hotkey: 'E', color: CYAN,   draw: drawCustomerResponse },
+                { name: 'Pipeline Review',     type: 'ultimate', hotkey: 'R', color: GOLD, draw: drawPipelineReview },
+                { name: 'Meeting Prep',        type: 'combo', hotkey: 'D', color: PURPLE, draw: drawMeetingPrep },
+                { name: 'Draft Proposal',      type: 'combo', hotkey: 'F', color: PURPLE, draw: drawDraftProposal },
+            ]
+        }
+    ];
+
+    // =========================================================================
+    // DRAWING UTILITIES
+    // =========================================================================
+    function hexToRGBA(hex, alpha) {
+        const r = parseInt(hex.slice(1,3), 16);
+        const g = parseInt(hex.slice(3,5), 16);
+        const b = parseInt(hex.slice(5,7), 16);
+        return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    function drawIconBase(ctx, color, isUltimate) {
+        const s = ICON_SIZE;
+        const r = 6;
+        // Background
+        ctx.beginPath();
+        ctx.roundRect(0, 0, s, s, r);
+        ctx.fillStyle = BG_COLOR;
+        ctx.fill();
+
+        // Inner shadow / vignette
+        const grad = ctx.createRadialGradient(s/2, s/2, 8, s/2, s/2, s*0.7);
+        grad.addColorStop(0, 'rgba(255,255,255,0.04)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.3)');
+        ctx.beginPath();
+        ctx.roundRect(0, 0, s, s, r);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Border
+        ctx.beginPath();
+        ctx.roundRect(0.5, 0.5, s-1, s-1, r);
+        ctx.strokeStyle = hexToRGBA(color, 0.4);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Corner accents
+        ctx.strokeStyle = hexToRGBA(color, 0.6);
+        ctx.lineWidth = 1.5;
+        // top-left
+        ctx.beginPath(); ctx.moveTo(r+1, 1); ctx.lineTo(1, 1); ctx.lineTo(1, r+1); ctx.stroke();
+        // top-right
+        ctx.beginPath(); ctx.moveTo(s-r-1, 1); ctx.lineTo(s-1, 1); ctx.lineTo(s-1, r+1); ctx.stroke();
+        // bottom-left
+        ctx.beginPath(); ctx.moveTo(1, s-r-1); ctx.lineTo(1, s-1); ctx.lineTo(r+1, s-1); ctx.stroke();
+        // bottom-right
+        ctx.beginPath(); ctx.moveTo(s-1, s-r-1); ctx.lineTo(s-1, s-1); ctx.lineTo(s-r-1, s-1); ctx.stroke();
+
+        if (isUltimate) {
+            // Gold glow
+            ctx.shadowColor = GOLD;
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.roundRect(2, 2, s-4, s-4, r-1);
+            ctx.strokeStyle = hexToRGBA(GOLD, 0.35);
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    function setIconStyle(ctx, color, lineW) {
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = lineW || 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+    }
+
+    // =========================================================================
+    // WRITER ABILITIES
+    // =========================================================================
+    function drawLinkedInPost(ctx, color) {
+        const c = 32;
+        setIconStyle(ctx, color, 2);
+        // Speech bubble
+        ctx.beginPath();
+        ctx.roundRect(14, 14, 30, 24, 5);
+        ctx.stroke();
+        // Bubble tail
+        ctx.beginPath();
+        ctx.moveTo(22, 38); ctx.lineTo(18, 46); ctx.lineTo(28, 38);
+        ctx.stroke();
+        // "in" text
+        ctx.font = 'bold 13px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('in', 29, 27);
+    }
+
+    function drawTwitterPost(ctx, color) {
+        setIconStyle(ctx, color, 1.5);
+        // Bird / wing silhouette
+        ctx.beginPath();
+        ctx.moveTo(16, 34);
+        ctx.quadraticCurveTo(18, 22, 28, 18);
+        ctx.quadraticCurveTo(24, 22, 26, 20);
+        ctx.quadraticCurveTo(30, 16, 38, 16);
+        ctx.quadraticCurveTo(34, 20, 36, 22);
+        ctx.quadraticCurveTo(42, 20, 46, 18);
+        ctx.quadraticCurveTo(42, 24, 40, 26);
+        ctx.quadraticCurveTo(48, 24, 50, 22);
+        ctx.quadraticCurveTo(46, 28, 42, 30);
+        ctx.quadraticCurveTo(36, 38, 24, 40);
+        ctx.quadraticCurveTo(18, 40, 16, 34);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawQualityAudit(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Magnifying glass
+        ctx.beginPath();
+        ctx.arc(27, 27, 12, 0, Math.PI*2);
+        ctx.stroke();
+        // Handle
+        ctx.beginPath();
+        ctx.moveTo(36, 36); ctx.lineTo(48, 48);
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        // Checkmark inside
+        ctx.beginPath();
+        ctx.moveTo(21, 27); ctx.lineTo(25, 32); ctx.lineTo(33, 22);
+        ctx.stroke();
+    }
+
+    function drawWeekBatch(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Calendar
+        ctx.beginPath();
+        ctx.roundRect(12, 16, 30, 28, 3);
+        ctx.stroke();
+        // Calendar top bar
+        ctx.beginPath();
+        ctx.moveTo(12, 24); ctx.lineTo(42, 24);
+        ctx.stroke();
+        // Calendar pegs
+        ctx.beginPath();
+        ctx.moveTo(20, 14); ctx.lineTo(20, 19);
+        ctx.moveTo(34, 14); ctx.lineTo(34, 19);
+        ctx.stroke();
+        // Grid dots (days)
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 4; c++) {
+                ctx.beginPath();
+                ctx.arc(18 + c*7, 29 + r*5, 1, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+        // Lightning bolt
+        ctx.beginPath();
+        ctx.moveTo(44, 14); ctx.lineTo(38, 28); ctx.lineTo(44, 28); ctx.lineTo(38, 44);
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        // Glow
+        ctx.shadowColor = GOLD;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(44, 14); ctx.lineTo(38, 28); ctx.lineTo(44, 28); ctx.lineTo(38, 44);
+        ctx.strokeStyle = hexToRGBA(GOLD, 0.5);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+
+    function drawGenerateImage(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Image frame
+        ctx.beginPath();
+        ctx.roundRect(14, 16, 28, 26, 3);
+        ctx.stroke();
+        // Mountain inside
+        ctx.beginPath();
+        ctx.moveTo(16, 40); ctx.lineTo(24, 28); ctx.lineTo(30, 34); ctx.lineTo(38, 22); ctx.lineTo(40, 40);
+        ctx.strokeStyle = hexToRGBA(color, 0.5);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        // Sparkle
+        setIconStyle(ctx, color, 1.5);
+        drawSparkle(ctx, 46, 14, 6, color);
+    }
+
+    function drawGenerateCarousel(ctx, color) {
+        setIconStyle(ctx, color, 1.5);
+        // Stacked slides
+        ctx.beginPath();
+        ctx.roundRect(20, 12, 24, 18, 2);
+        ctx.strokeStyle = hexToRGBA(color, 0.3);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.roundRect(16, 16, 24, 18, 2);
+        ctx.strokeStyle = hexToRGBA(color, 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.roundRect(12, 20, 24, 18, 2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Arrow
+        ctx.beginPath();
+        ctx.moveTo(38, 36); ctx.lineTo(50, 42); ctx.lineTo(38, 48);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    // =========================================================================
+    // SCOUT ABILITIES
+    // =========================================================================
+    function drawYoutubeResearch(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Play button (rounded rect)
+        ctx.beginPath();
+        ctx.roundRect(14, 18, 26, 20, 4);
+        ctx.stroke();
+        // Play triangle
+        ctx.beginPath();
+        ctx.moveTo(24, 24); ctx.lineTo(34, 28); ctx.lineTo(24, 32);
+        ctx.closePath();
+        ctx.fill();
+        // Magnifying glass overlay
+        ctx.beginPath();
+        ctx.arc(42, 40, 8, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(48, 46); ctx.lineTo(52, 50);
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+    }
+
+    function drawAnalyticsCheck(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Bar chart
+        ctx.fillRect(14, 36, 6, 12);
+        ctx.fillRect(23, 28, 6, 20);
+        ctx.fillRect(32, 20, 6, 28);
+        ctx.fillRect(41, 24, 6, 24);
+        // Eye on top
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(18, 16);
+        ctx.quadraticCurveTo(32, 6, 46, 16);
+        ctx.quadraticCurveTo(32, 26, 18, 16);
+        ctx.stroke();
+        // Pupil
+        ctx.beginPath();
+        ctx.arc(32, 16, 3, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    function drawFindDiscussions(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Two overlapping speech bubbles
+        ctx.beginPath();
+        ctx.roundRect(10, 14, 22, 16, 4);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(16, 30); ctx.lineTo(14, 36); ctx.lineTo(22, 30);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.roundRect(26, 22, 22, 16, 4);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(40, 38); ctx.lineTo(44, 44); ctx.lineTo(38, 38);
+        ctx.stroke();
+        // Search icon
+        ctx.beginPath();
+        ctx.arc(44, 14, 5, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(48, 18); ctx.lineTo(52, 22);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    function drawMarketSweep(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Radar dish base
+        ctx.beginPath();
+        ctx.moveTo(28, 48); ctx.lineTo(36, 48);
+        ctx.moveTo(32, 48); ctx.lineTo(32, 36);
+        ctx.stroke();
+        // Dish arc
+        ctx.beginPath();
+        ctx.arc(32, 36, 16, Math.PI, 0);
+        ctx.stroke();
+        // Wave rings
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 1.5;
+        for (let i = 1; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.arc(32, 26, 6 + i*5, -Math.PI*0.6, Math.PI*0.1);
+            ctx.stroke();
+        }
+        // Glow
+        ctx.shadowColor = GOLD;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(32, 26, 3, 0, Math.PI*2);
+        ctx.fillStyle = GOLD;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    function drawTrendJacking(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Trending arrow going up
+        ctx.beginPath();
+        ctx.moveTo(12, 44);
+        ctx.lineTo(26, 30);
+        ctx.lineTo(34, 36);
+        ctx.lineTo(50, 16);
+        ctx.stroke();
+        // Arrowhead
+        ctx.beginPath();
+        ctx.moveTo(44, 16); ctx.lineTo(50, 16); ctx.lineTo(50, 22);
+        ctx.stroke();
+        // Hook at bottom
+        ctx.beginPath();
+        ctx.arc(14, 48, 4, Math.PI, 0, true);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(18, 48); ctx.lineTo(18, 44);
+        ctx.stroke();
+    }
+
+    function drawChannelDigest(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Inbox tray
+        ctx.beginPath();
+        ctx.moveTo(12, 28); ctx.lineTo(12, 44); ctx.lineTo(52, 44); ctx.lineTo(52, 28);
+        ctx.stroke();
+        // Tray lip
+        ctx.beginPath();
+        ctx.moveTo(12, 34); ctx.lineTo(22, 34); ctx.lineTo(26, 38); ctx.lineTo(38, 38); ctx.lineTo(42, 34); ctx.lineTo(52, 34);
+        ctx.stroke();
+        // Filter funnel on top
+        ctx.beginPath();
+        ctx.moveTo(20, 14); ctx.lineTo(44, 14); ctx.lineTo(36, 24); ctx.lineTo(36, 30);
+        ctx.moveTo(28, 30); ctx.lineTo(28, 24); ctx.lineTo(20, 14);
+        ctx.stroke();
+    }
+
+    // =========================================================================
+    // ENGINEER ABILITIES
+    // =========================================================================
+    function drawCreateSkill(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Wrench
+        ctx.beginPath();
+        ctx.moveTo(20, 44); ctx.lineTo(36, 28);
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        // Wrench head
+        ctx.beginPath();
+        ctx.arc(40, 24, 8, -0.5, Math.PI+0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(40, 16); ctx.lineTo(44, 18);
+        ctx.moveTo(40, 32); ctx.lineTo(44, 30);
+        ctx.stroke();
+        // Plus sign
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(14, 18); ctx.lineTo(14, 30);
+        ctx.moveTo(8, 24); ctx.lineTo(20, 24);
+        ctx.stroke();
+    }
+
+    function drawBuildMCP(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Server rack
+        ctx.beginPath();
+        ctx.roundRect(16, 12, 24, 36, 3);
+        ctx.stroke();
+        // Rack lines
+        ctx.beginPath();
+        ctx.moveTo(16, 24); ctx.lineTo(40, 24);
+        ctx.moveTo(16, 36); ctx.lineTo(40, 36);
+        ctx.stroke();
+        // LED dots
+        ctx.beginPath();
+        ctx.arc(22, 18, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(22, 30, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(22, 42, 2, 0, Math.PI*2); ctx.fill();
+        // Glow emanation
+        ctx.strokeStyle = hexToRGBA(color, 0.4);
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            ctx.arc(44+i*4, 24, 3+i*3, -Math.PI/3, Math.PI/3);
+            ctx.stroke();
+        }
+    }
+
+    function drawTestSkill(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Flask
+        ctx.beginPath();
+        ctx.moveTo(24, 14); ctx.lineTo(24, 28); ctx.lineTo(14, 46); ctx.lineTo(42, 46); ctx.lineTo(32, 28); ctx.lineTo(32, 14);
+        ctx.closePath();
+        ctx.stroke();
+        // Flask top
+        ctx.beginPath();
+        ctx.moveTo(22, 14); ctx.lineTo(34, 14);
+        ctx.stroke();
+        // Liquid level
+        ctx.beginPath();
+        ctx.moveTo(20, 36); ctx.lineTo(36, 36);
+        ctx.strokeStyle = hexToRGBA(color, 0.4);
+        ctx.stroke();
+        // Checkmark
+        setIconStyle(ctx, color, 2.5);
+        ctx.beginPath();
+        ctx.moveTo(44, 16); ctx.lineTo(48, 22); ctx.lineTo(54, 12);
+        ctx.stroke();
+    }
+
+    function drawFullProductBuild(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Factory building
+        ctx.beginPath();
+        ctx.moveTo(10, 46); ctx.lineTo(10, 24); ctx.lineTo(20, 18); ctx.lineTo(20, 24);
+        ctx.lineTo(30, 18); ctx.lineTo(30, 24); ctx.lineTo(40, 18); ctx.lineTo(40, 46);
+        ctx.stroke();
+        // Door
+        ctx.beginPath();
+        ctx.roundRect(22, 34, 8, 12, [2,2,0,0]);
+        ctx.stroke();
+        // Chimney
+        ctx.beginPath();
+        ctx.fillStyle = hexToRGBA(GOLD, 0.8);
+        ctx.fillRect(34, 12, 4, 8);
+        // Lightning bolt
+        ctx.beginPath();
+        ctx.moveTo(50, 10); ctx.lineTo(46, 22); ctx.lineTo(50, 22); ctx.lineTo(46, 34);
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.shadowColor = GOLD;
+        ctx.shadowBlur = 8;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+
+    function drawPackagePlugin(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Box (3D)
+        ctx.beginPath();
+        ctx.moveTo(32, 14); ctx.lineTo(50, 24); ctx.lineTo(50, 42); ctx.lineTo(32, 50);
+        ctx.lineTo(14, 42); ctx.lineTo(14, 24); ctx.closePath();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(32, 14); ctx.lineTo(32, 50);
+        ctx.moveTo(14, 24); ctx.lineTo(50, 24);
+        ctx.stroke();
+        // Bow / seal
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(32, 24, 3, 0, Math.PI*2);
+        ctx.fill();
+        // Ribbon lines
+        ctx.beginPath();
+        ctx.moveTo(28, 22); ctx.quadraticCurveTo(24, 16, 26, 12);
+        ctx.moveTo(36, 22); ctx.quadraticCurveTo(40, 16, 38, 12);
+        ctx.stroke();
+    }
+
+    function drawDeployVercel(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Rocket body
+        ctx.beginPath();
+        ctx.moveTo(32, 10);
+        ctx.quadraticCurveTo(40, 18, 40, 30);
+        ctx.lineTo(36, 36);
+        ctx.lineTo(28, 36);
+        ctx.lineTo(24, 30);
+        ctx.quadraticCurveTo(24, 18, 32, 10);
+        ctx.closePath();
+        ctx.stroke();
+        // Window
+        ctx.beginPath();
+        ctx.arc(32, 22, 3, 0, Math.PI*2);
+        ctx.stroke();
+        // Fins
+        ctx.beginPath();
+        ctx.moveTo(24, 28); ctx.lineTo(18, 36); ctx.lineTo(24, 34);
+        ctx.moveTo(40, 28); ctx.lineTo(46, 36); ctx.lineTo(40, 34);
+        ctx.stroke();
+        // Exhaust
+        ctx.strokeStyle = hexToRGBA(color, 0.6);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(29, 36); ctx.lineTo(27, 46);
+        ctx.moveTo(32, 36); ctx.lineTo(32, 50);
+        ctx.moveTo(35, 36); ctx.lineTo(37, 46);
+        ctx.stroke();
+    }
+
+    // =========================================================================
+    // COMMANDER ABILITIES
+    // =========================================================================
+    function drawMorningBriefing(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Sun
+        ctx.beginPath();
+        ctx.arc(22, 20, 8, 0, Math.PI*2);
+        ctx.stroke();
+        // Sun rays
+        for (let i = 0; i < 8; i++) {
+            const a = (i/8) * Math.PI*2;
+            ctx.beginPath();
+            ctx.moveTo(22 + Math.cos(a)*11, 20 + Math.sin(a)*11);
+            ctx.lineTo(22 + Math.cos(a)*14, 20 + Math.sin(a)*14);
+            ctx.stroke();
+        }
+        // Clipboard
+        ctx.beginPath();
+        ctx.roundRect(34, 20, 18, 26, 2);
+        ctx.stroke();
+        // Clip
+        ctx.beginPath();
+        ctx.roundRect(38, 17, 10, 6, 2);
+        ctx.stroke();
+        // Lines
+        ctx.beginPath();
+        ctx.moveTo(38, 30); ctx.lineTo(48, 30);
+        ctx.moveTo(38, 35); ctx.lineTo(48, 35);
+        ctx.moveTo(38, 40); ctx.lineTo(44, 40);
+        ctx.strokeStyle = hexToRGBA(color, 0.5);
+        ctx.stroke();
+    }
+
+    function drawProcessQueue(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Conveyor belt base
+        ctx.beginPath();
+        ctx.moveTo(10, 40); ctx.lineTo(54, 40);
+        ctx.stroke();
+        // Rollers
+        ctx.beginPath();
+        ctx.arc(16, 42, 3, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(32, 42, 3, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(48, 42, 3, 0, Math.PI*2); ctx.stroke();
+        // Items on belt
+        ctx.fillStyle = hexToRGBA(color, 0.6);
+        ctx.beginPath(); ctx.roundRect(13, 30, 8, 10, 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.roundRect(28, 28, 8, 12, 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.roundRect(43, 31, 8, 9, 2); ctx.fill(); ctx.stroke();
+        // Arrow
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(20, 20); ctx.lineTo(44, 20);
+        ctx.moveTo(40, 16); ctx.lineTo(44, 20); ctx.lineTo(40, 24);
+        ctx.stroke();
+    }
+
+    function drawEODReport(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Moon
+        ctx.beginPath();
+        ctx.arc(20, 22, 10, 0, Math.PI*2);
+        ctx.stroke();
+        // Moon crescent (overlay circle)
+        ctx.fillStyle = BG_COLOR;
+        ctx.beginPath();
+        ctx.arc(26, 18, 8, 0, Math.PI*2);
+        ctx.fill();
+        // Document
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(32, 22, 18, 24, 2);
+        ctx.stroke();
+        // Lines
+        ctx.beginPath();
+        ctx.moveTo(36, 28); ctx.lineTo(46, 28);
+        ctx.moveTo(36, 33); ctx.lineTo(46, 33);
+        ctx.moveTo(36, 38); ctx.lineTo(42, 38);
+        ctx.strokeStyle = hexToRGBA(color, 0.5);
+        ctx.stroke();
+    }
+
+    function drawCampaignPlan(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Chess king piece
+        ctx.beginPath();
+        ctx.moveTo(20, 46); ctx.lineTo(16, 46); ctx.lineTo(18, 38);
+        ctx.lineTo(14, 30); ctx.quadraticCurveTo(20, 20, 20, 16);
+        ctx.lineTo(20, 12); ctx.lineTo(24, 12); ctx.lineTo(24, 16);
+        ctx.quadraticCurveTo(24, 20, 30, 30);
+        ctx.lineTo(26, 38); ctx.lineTo(28, 46);
+        ctx.closePath();
+        ctx.strokeStyle = GOLD;
+        ctx.stroke();
+        // Cross on top
+        ctx.beginPath();
+        ctx.moveTo(22, 8); ctx.lineTo(22, 14);
+        ctx.moveTo(19, 11); ctx.lineTo(25, 11);
+        ctx.stroke();
+        // Map lines
+        ctx.strokeStyle = hexToRGBA(GOLD, 0.5);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(34, 16); ctx.lineTo(52, 16); ctx.lineTo(52, 46); ctx.lineTo(34, 46); ctx.closePath();
+        ctx.stroke();
+        // Map path
+        ctx.beginPath();
+        ctx.moveTo(38, 20); ctx.lineTo(42, 28); ctx.lineTo(48, 24); ctx.lineTo(46, 36); ctx.lineTo(40, 40);
+        ctx.setLineDash([2,2]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Glow
+        ctx.shadowColor = GOLD;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(22, 11, 2, 0, Math.PI*2);
+        ctx.fillStyle = GOLD;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    function drawBroadcastOrder(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Megaphone
+        ctx.beginPath();
+        ctx.moveTo(14, 24); ctx.lineTo(14, 36);
+        ctx.lineTo(22, 36); ctx.lineTo(38, 44);
+        ctx.lineTo(38, 16); ctx.lineTo(22, 24);
+        ctx.closePath();
+        ctx.stroke();
+        // Sound waves
+        ctx.lineWidth = 1.5;
+        for (let i = 1; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.arc(40, 30, 4+i*4, -Math.PI/3, Math.PI/3);
+            ctx.stroke();
+        }
+    }
+
+    function drawTaskAssignment(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Arrow
+        ctx.beginPath();
+        ctx.moveTo(12, 30); ctx.lineTo(36, 30);
+        ctx.moveTo(30, 24); ctx.lineTo(36, 30); ctx.lineTo(30, 36);
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        // Target
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(46, 30, 10, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(46, 30, 5, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(46, 30, 1.5, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    // =========================================================================
+    // DIPLOMAT ABILITIES
+    // =========================================================================
+    function drawPrepCall(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Phone handset
+        ctx.beginPath();
+        ctx.moveTo(14, 18);
+        ctx.quadraticCurveTo(14, 14, 18, 14);
+        ctx.lineTo(24, 14);
+        ctx.quadraticCurveTo(26, 14, 26, 18);
+        ctx.lineTo(26, 22);
+        ctx.quadraticCurveTo(24, 30, 18, 36);
+        ctx.quadraticCurveTo(14, 38, 14, 40);
+        ctx.lineTo(14, 44);
+        ctx.quadraticCurveTo(14, 48, 18, 48);
+        ctx.lineTo(24, 48);
+        ctx.quadraticCurveTo(28, 48, 28, 44);
+        ctx.stroke();
+        // Document
+        ctx.beginPath();
+        ctx.roundRect(34, 16, 16, 22, 2);
+        ctx.stroke();
+        // Lines
+        ctx.beginPath();
+        ctx.moveTo(37, 22); ctx.lineTo(47, 22);
+        ctx.moveTo(37, 27); ctx.lineTo(47, 27);
+        ctx.moveTo(37, 32); ctx.lineTo(43, 32);
+        ctx.strokeStyle = hexToRGBA(color, 0.5);
+        ctx.stroke();
+    }
+
+    function drawAnalyzeCalls(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Headset
+        ctx.beginPath();
+        ctx.arc(28, 26, 12, Math.PI, 0);
+        ctx.stroke();
+        // Ear cups
+        ctx.beginPath();
+        ctx.roundRect(14, 26, 6, 14, 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.roundRect(36, 26, 6, 14, 2);
+        ctx.fill();
+        // Mic
+        ctx.beginPath();
+        ctx.moveTo(14, 38); ctx.quadraticCurveTo(14, 46, 22, 46);
+        ctx.stroke();
+        // Chart overlay
+        ctx.strokeStyle = hexToRGBA(color, 0.7);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(38, 44); ctx.lineTo(42, 38); ctx.lineTo(46, 42); ctx.lineTo(50, 34); ctx.lineTo(54, 36);
+        ctx.stroke();
+    }
+
+    function drawCustomerResponse(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Reply arrow
+        ctx.beginPath();
+        ctx.moveTo(36, 18); ctx.lineTo(20, 18);
+        ctx.quadraticCurveTo(12, 18, 12, 26);
+        ctx.quadraticCurveTo(12, 34, 20, 34);
+        ctx.lineTo(40, 34);
+        ctx.stroke();
+        // Arrowhead
+        ctx.beginPath();
+        ctx.moveTo(26, 12); ctx.lineTo(20, 18); ctx.lineTo(26, 24);
+        ctx.stroke();
+        // Heart
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(46, 44);
+        ctx.bezierCurveTo(46, 40, 40, 38, 40, 42);
+        ctx.bezierCurveTo(40, 46, 46, 50, 46, 50);
+        ctx.bezierCurveTo(46, 50, 52, 46, 52, 42);
+        ctx.bezierCurveTo(52, 38, 46, 40, 46, 44);
+        ctx.fill();
+    }
+
+    function drawPipelineReview(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Funnel
+        ctx.beginPath();
+        ctx.moveTo(12, 12); ctx.lineTo(52, 12);
+        ctx.lineTo(38, 30); ctx.lineTo(38, 42);
+        ctx.lineTo(26, 42); ctx.lineTo(26, 30);
+        ctx.closePath();
+        ctx.strokeStyle = GOLD;
+        ctx.stroke();
+        // Golden flow inside
+        ctx.fillStyle = hexToRGBA(GOLD, 0.15);
+        ctx.fill();
+        // Drip
+        ctx.fillStyle = GOLD;
+        ctx.beginPath();
+        ctx.moveTo(32, 42); ctx.lineTo(30, 48); ctx.lineTo(34, 48);
+        ctx.closePath();
+        ctx.fill();
+        // Glow
+        ctx.shadowColor = GOLD;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(32, 48, 2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Level lines
+        ctx.strokeStyle = hexToRGBA(GOLD, 0.4);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2,3]);
+        ctx.beginPath();
+        ctx.moveTo(18, 18); ctx.lineTo(46, 18);
+        ctx.moveTo(24, 24); ctx.lineTo(40, 24);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    function drawMeetingPrep(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Handshake
+        ctx.beginPath();
+        ctx.moveTo(10, 30); ctx.lineTo(18, 24);
+        ctx.lineTo(28, 28); ctx.lineTo(34, 24);
+        ctx.lineTo(42, 28); ctx.lineTo(50, 22);
+        ctx.stroke();
+        // Hand shapes
+        ctx.beginPath();
+        ctx.moveTo(24, 32); ctx.lineTo(30, 36); ctx.lineTo(36, 32);
+        ctx.stroke();
+        // Clock
+        ctx.beginPath();
+        ctx.arc(44, 40, 8, 0, Math.PI*2);
+        ctx.stroke();
+        // Clock hands
+        ctx.beginPath();
+        ctx.moveTo(44, 40); ctx.lineTo(44, 35);
+        ctx.moveTo(44, 40); ctx.lineTo(48, 42);
+        ctx.stroke();
+    }
+
+    function drawDraftProposal(ctx, color) {
+        setIconStyle(ctx, color, 2);
+        // Scroll
+        ctx.beginPath();
+        ctx.moveTo(18, 14);
+        ctx.arc(18, 16, 4, -Math.PI/2, Math.PI/2, true);
+        ctx.lineTo(40, 20);
+        ctx.lineTo(40, 46);
+        ctx.arc(40, 44, 4, Math.PI/2, -Math.PI/2, true);
+        ctx.lineTo(18, 40);
+        ctx.lineTo(18, 14);
+        ctx.stroke();
+        // Scroll curl top
+        ctx.beginPath();
+        ctx.arc(18, 16, 4, -Math.PI/2, Math.PI/2);
+        ctx.strokeStyle = hexToRGBA(color, 0.4);
+        ctx.stroke();
+        // Text lines
+        ctx.strokeStyle = hexToRGBA(color, 0.5);
+        ctx.beginPath();
+        ctx.moveTo(22, 25); ctx.lineTo(36, 25);
+        ctx.moveTo(22, 30); ctx.lineTo(36, 30);
+        ctx.moveTo(22, 35); ctx.lineTo(30, 35);
+        ctx.stroke();
+        // Pen
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(46, 14); ctx.lineTo(50, 10);
+        ctx.moveTo(44, 16); ctx.lineTo(50, 10);
+        ctx.moveTo(44, 16); ctx.lineTo(46, 38);
+        ctx.moveTo(46, 14); ctx.lineTo(48, 36);
+        ctx.stroke();
+        // Pen tip
+        ctx.beginPath();
+        ctx.moveTo(46, 38); ctx.lineTo(47, 42); ctx.lineTo(48, 36);
+        ctx.stroke();
+    }
+
+    // =========================================================================
+    // SPARKLE HELPER
+    // =========================================================================
+    function drawSparkle(ctx, x, y, size, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x, y - size);
+        ctx.lineTo(x + size*0.25, y - size*0.25);
+        ctx.lineTo(x + size, y);
+        ctx.lineTo(x + size*0.25, y + size*0.25);
+        ctx.lineTo(x, y + size);
+        ctx.lineTo(x - size*0.25, y + size*0.25);
+        ctx.lineTo(x - size, y);
+        ctx.lineTo(x - size*0.25, y - size*0.25);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // =========================================================================
+    // RENDER ALL ICONS
+    // =========================================================================
+    const allCanvases = [];
+
+    function renderAllIcons() {
+        const gallery = document.getElementById('icon-gallery');
+        gallery.innerHTML = '';
+
+        unitTypes.forEach(unit => {
+            const section = document.createElement('div');
+            section.className = 'unit-section';
+
+            const header = document.createElement('div');
+            header.className = `unit-header ${unit.className}`;
+            header.textContent = unit.name;
+            section.appendChild(header);
+
+            const grid = document.createElement('div');
+            grid.className = 'icon-grid';
+
+            unit.abilities.forEach(ability => {
+                const cell = document.createElement('div');
+                cell.className = 'icon-cell';
+                cell.title = `Click to download: ${ability.name}`;
+                cell.onclick = () => downloadSingle(ability.name, cell.querySelector('canvas'));
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'icon-wrapper';
+
+                const canvas = document.createElement('canvas');
+                canvas.width = ICON_SIZE;
+                canvas.height = ICON_SIZE;
+                canvas.style.width = ICON_SIZE + 'px';
+                canvas.style.height = ICON_SIZE + 'px';
+
+                const c = canvas.getContext('2d');
+                drawIconBase(c, ability.color, ability.type === 'ultimate');
+                ability.draw(c, ability.color);
+
+                wrapper.appendChild(canvas);
+
+                // Hotkey badge
+                const badge = document.createElement('div');
+                badge.className = 'hotkey-badge' + (ability.type === 'ultimate' ? ' ult' : '');
+                badge.textContent = ability.hotkey;
+                wrapper.appendChild(badge);
+
+                cell.appendChild(wrapper);
+
+                const label = document.createElement('div');
+                label.className = 'icon-label';
+                label.textContent = ability.name;
+                cell.appendChild(label);
+
+                const typeBadge = document.createElement('div');
+                typeBadge.className = `ability-type ${ability.type}`;
+                typeBadge.textContent = ability.type;
+                cell.appendChild(typeBadge);
+
+                grid.appendChild(cell);
+                allCanvases.push({ name: ability.name, canvas, unit: unit.name, type: ability.type });
+            });
+
+            section.appendChild(grid);
+            gallery.appendChild(section);
+        });
+    }
+
+    // =========================================================================
+    // EXPORT FUNCTIONS
+    // =========================================================================
+    function downloadSingle(name, canvas) {
+        const link = document.createElement('a');
+        link.download = name.toLowerCase().replace(/\s+/g, '-') + '.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    function downloadFullSheet() {
+        const padding = 20;
+        const labelH = 40;
+        const iconSpacing = 90;
+        const sectionGap = 60;
+        const cols = 6;
+
+        const sheetW = padding*2 + cols * iconSpacing;
+        const sheetH = padding + unitTypes.length * (sectionGap + ICON_SIZE + labelH) + padding;
+
+        const sheet = document.getElementById('sheet-canvas');
+        sheet.width = sheetW;
+        sheet.height = sheetH;
+        const ctx = sheet.getContext('2d');
+
+        // Background
+        ctx.fillStyle = '#0a0a0f';
+        ctx.fillRect(0, 0, sheetW, sheetH);
+
+        // Title
+        ctx.fillStyle = '#00ffcc';
+        ctx.font = '600 14px Orbitron, monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText('AGENT EMPIRES - ABILITY ICONS', padding, padding + 14);
+
+        let y = padding + 36;
+        let idx = 0;
+
+        unitTypes.forEach(unit => {
+            // Section header
+            ctx.fillStyle = '#00ffcc';
+            ctx.font = '600 11px Orbitron, monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(unit.name.toUpperCase(), padding, y + 11);
+
+            // Divider
+            ctx.strokeStyle = 'rgba(0,255,204,0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padding, y + 16);
+            ctx.lineTo(sheetW - padding, y + 16);
+            ctx.stroke();
+
+            y += 24;
+
+            unit.abilities.forEach((ability, i) => {
+                const x = padding + i * iconSpacing;
+                const src = allCanvases[idx].canvas;
+                ctx.drawImage(src, x, y);
+
+                // Label
+                ctx.fillStyle = '#808090';
+                ctx.font = '400 8px JetBrains Mono, monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(ability.name, x + ICON_SIZE/2, y + ICON_SIZE + 14);
+
+                // Type
+                const typeColors = { basic: '#00ffcc', combo: '#7b68ee', ultimate: '#ffd700' };
+                ctx.fillStyle = typeColors[ability.type];
+                ctx.font = '400 7px JetBrains Mono, monospace';
+                ctx.fillText(`[${ability.hotkey}] ${ability.type.toUpperCase()}`, x + ICON_SIZE/2, y + ICON_SIZE + 26);
+
+                idx++;
+            });
+
+            y += ICON_SIZE + labelH + 16;
+        });
+
+        const link = document.createElement('a');
+        link.download = 'agent-empires-ability-icons.png';
+        link.href = sheet.toDataURL('image/png');
+        link.click();
+    }
+
+    function downloadAllIndividual() {
+        allCanvases.forEach((item, i) => {
+            setTimeout(() => {
+                downloadSingle(item.name, item.canvas);
+            }, i * 100);
+        });
+    }
+
+    // Initialize
+    renderAllIcons();
+    </script>
+</body>
+</html>

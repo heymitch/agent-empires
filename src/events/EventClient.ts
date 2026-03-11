@@ -124,11 +124,16 @@ export class EventClient {
     }
 
     this.reconnectAttempts++
-    this.log(`Reconnecting in ${this.options.reconnectInterval}ms (attempt ${this.reconnectAttempts})`)
+    // Exponential backoff: 2s, 4s, 8s, 16s, capped at 30s
+    const delay = Math.min(
+      this.options.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1),
+      30000
+    )
+    this.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`)
 
     this.reconnectTimeout = window.setTimeout(() => {
       this.connect()
-    }, this.options.reconnectInterval)
+    }, delay)
   }
 
   private send(message: ClientMessage): void {

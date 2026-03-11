@@ -1,8 +1,2 @@
-/* Main CSS entry point - imports all style modules */
-
-@import './base.css';
-@import './sessions.css';
-@import './feed.css';
-@import './prompt.css';
-@import './hud.css';
-@import './modals.css';
+/* Agent Empires - Main CSS entry point */
+@import './agent-empires.css';

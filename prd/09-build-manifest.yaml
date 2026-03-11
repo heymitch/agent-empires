@@ -1,0 +1,193 @@
+project: agent-empires-phase1
+repo: /Users/heymitch/agent-empires
+worktree_root: /Users/heymitch/agent-empires/.worktrees
+
+shared_context:
+  - /Users/heymitch/agent-empires/prd/09-phase1-visual-foundation.md
+  - /Users/heymitch/agent-empires/prd/06-visual-direction.md
+  - /Users/heymitch/agent-empires/prd/08-build-failure-patterns.md
+  - /Users/heymitch/agent-empires/src/renderer/constants.ts
+
+shared_rules:
+  line_limit: 500
+  laws: /Users/heymitch/speakeasy-agent/domains/scaling/knowledge-base/agentic-build-orchestrator.md
+  platform_constraints:
+    - PixiJS v8 API (no beginFill/endFill, use .rect().fill(), .circle().stroke())
+    - TypeScript strict
+    - import type for type-only imports
+    - No circular imports (shared constants in constants.ts)
+    - Check 08-build-failure-patterns.md before reporting done
+
+phases:
+  - name: "Phase 1A: Parallel Builders"
+    parallel:
+      - id: W1-terrain
+        component: TerrainRenderer
+        type: renderer
+        output: src/renderer/TerrainRenderer.ts
+        model: sonnet
+        context:
+          - /Users/heymitch/agent-empires/src/renderer/TerritoryRenderer.ts
+        spec: |
+          Replace TerritoryRenderer with TerrainRenderer. Keep the 7 territory polygon
+          shapes and their centers. Add: Perlin noise texture inside each polygon (use
+          inline simplex noise, do NOT add npm deps). Flowing magnetic field lines, not
+          random static. Active territories brighten 30%, threatened pulse red border,
+          dormant dim to 40%. Animated energy flow lines (thin cyan, drifting) inside
+          active territories. Must export same API: getTerritoryCenter(), draw(), plus
+          new updateTerritoryState(id, state). Territory labels stay (Orbitron font).
+          Use PixiJS v8 Graphics API only.
+
+      - id: W1-fog
+        component: FogOfWar
+        type: renderer
+        output: src/renderer/FogOfWar.ts
+        model: sonnet
+        context:
+          - /Users/heymitch/agent-empires/src/renderer/FogRenderer.ts
+          - /Users/heymitch/agent-empires/prd/02-physics-and-movement.md
+        spec: |
+          Rewrite fog of war using RenderTexture compositing. Three states: visible
+          (clear, units present), stale (grid ghost at 40%, 2-5 min since last unit),
+          dark (85% opacity, 5+ min). Use a full-world RenderTexture. Draw black fill,
+          then for each visible unit draw a clear circle (radius 300) using a white
+          sprite with multiply/erase approach. Radar sweep animation on zone entry:
+          bright arc sweeps 360 degrees over 1.5s clearing fog. Fog regrowth: starts
+          at 2min, full dark at 5min. Export: update(unitPositions, territoryStates),
+          init(fogLayer, worldW, worldH). Constructor takes the PixiJS app reference
+          for RenderTexture creation. Must work with PixiJS v8 Application.
+
+      - id: W1-effects
+        component: ScreenEffects
+        type: renderer
+        output: src/renderer/ScreenEffects.ts
+        model: sonnet
+        context:
+          - /Users/heymitch/agent-empires/prd/06-visual-direction.md
+        spec: |
+          CSS-based post-processing overlay (NOT PixiJS filters). Create a div overlaid
+          on #canvas-container with pointer-events:none. CRT scanlines: horizontal lines
+          every 3px at 4% opacity with subtle vertical scroll animation. Vignette: radial
+          gradient, 12% at corners. Glitch trigger method: horizontal slice displacement +
+          color channel offset for 200ms (called on critical threats). All via CSS
+          animations on the overlay div. Toggle-able: init(container), enable(), disable(),
+          triggerGlitch(). Also add the CSS to agent-empires.css — use a SEPARATE block
+          clearly labeled "Screen Effects". Keep the CSS additions under 60 lines.
+
+      - id: W1-threat-bridge
+        component: ThreatDataBridge
+        type: server
+        output: server/ThreatDataBridge.ts
+        model: sonnet
+        context:
+          - /Users/heymitch/agent-empires/server/index.ts
+        spec: |
+          Server-side Supabase poller. Reads env vars SUPABASE_URL and SUPABASE_KEY
+          (use dotenv, it's already a dependency). Polls every 30 seconds:
+          - support_tickets: status='open', priority IN ('high','urgent') → SUPPORT threats
+          - deals: stage='lost' OR close_date < now() → SALES threats
+          - customers: health_status='at_risk' → RETENTION threats
+          - leads: status='cold', created_at > 7 days ago → LEAD-GEN threats
+          Use fetch() to call Supabase REST API (PostgREST). Each result maps to a
+          ThreatEvent with id, type, severity, territory, title, description. De-duplicate
+          by source_table+source_id. Track resolved threats (status changes). Broadcast
+          via a callback: onThreat(event) and onThreatResolved(id). Export class
+          ThreatDataBridge { constructor(supabaseUrl, supabaseKey, onThreat, onResolved),
+          start(), stop() }. Use node-fetch or built-in fetch. No heavy deps.
+
+      - id: W1-threat-render
+        component: ThreatRenderer
+        type: renderer
+        output: src/renderer/ThreatRenderer.ts
+        model: sonnet
+        context:
+          - /Users/heymitch/agent-empires/src/renderer/TerritoryRenderer.ts
+          - /Users/heymitch/agent-empires/prd/02b-enemy-system-spec.md
+        spec: |
+          Client-side threat visualization on PixiJS battlefield. Renders each active
+          threat as a pulsing circle within its territory bounds. Critical: red #ff3366,
+          radius 15-25, 1.5s pulse. Elevated: orange #ffaa00, 10-18, 2s. Low: gold
+          #ffd700, 8-12, 3s. Position: random jitter within territory polygon. Multiple
+          threats cluster (don't overlap). Threat count badge on territory label.
+          Resolved: shrink to 0 over 300ms then remove. Export class ThreatRenderer {
+          constructor(layer: Container, getTerritoryBounds), addThreat(event),
+          removeThreat(id), update(dt) }. The update() is called per frame to animate
+          pulses. Use PixiJS v8 Graphics API. Each threat is a Container with the
+          pulsing graphic + optional Text label.
+
+      - id: W1-state
+        component: TerritoryStateManager
+        type: game
+        output: src/game/TerritoryStateManager.ts
+        model: sonnet
+        context:
+          - /Users/heymitch/agent-empires/src/game/GameState.ts
+          - /Users/heymitch/agent-empires/src/renderer/TerritoryRenderer.ts
+        spec: |
+          Tracks per-territory state. Map<TerritoryId, TerritoryState> where state has:
+          lastUnitPresence (timestamp), unitCount, threatLevel (none/low/elevated/critical),
+          fogState (visible/stale/dark), activityCount (events in 5 min). Methods:
+          unitEnteredTerritory(id, territory), unitLeftTerritory(id, territory),
+          addThreat(territory, severity), removeThreat(territory), tick() (called each
+          second to recompute fog states from timestamps), getState(territory).
+          Event emitter pattern: onChange(handler) that fires when any territory state
+          changes. Import TerritoryId type from TerritoryRenderer. Fog thresholds:
+          visible < 2min, stale 2-5min, dark > 5min. Territory-specific rates:
+          support=1.5x faster regrowth, hq=0.5x slower.
+
+      - id: W1-schema
+        component: SchemaMigration
+        type: migration
+        output: server/migrations/001-threats-and-documents.sql
+        model: haiku
+        spec: |
+          Write a SQL migration file with two CREATE TABLE statements:
+          1. agent_empires_threats: id UUID PK default gen_random_uuid(), type TEXT NOT NULL,
+             severity TEXT NOT NULL CHECK (IN low/elevated/critical), territory TEXT NOT NULL,
+             title TEXT NOT NULL, description TEXT, source_table TEXT NOT NULL,
+             source_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active' CHECK (IN
+             active/resolved/expired), created_at TIMESTAMPTZ DEFAULT now(),
+             resolved_at TIMESTAMPTZ, metadata JSONB DEFAULT '{}'. Indexes on status,
+             territory, and unique on (source_table, source_id) WHERE status='active'.
+          2. company_documents: id UUID PK default gen_random_uuid(), title TEXT NOT NULL,
+             content TEXT, document_type TEXT DEFAULT 'general', metadata JSONB DEFAULT '{}',
+             created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now().
+          Just the SQL, nothing else. Output ONLY the .sql file.
+
+    sequential:
+      - id: W1-integrate
+        component: MainIntegration
+        type: integration
+        output: src/main.ts, server/index.ts, shared/types.ts
+        model: opus
+        context:
+          - /Users/heymitch/agent-empires/src/main.ts
+          - /Users/heymitch/agent-empires/server/index.ts
+          - /Users/heymitch/agent-empires/shared/types.ts
+          - All Phase 1A outputs
+        spec: |
+          Wire all Phase 1A components into the existing app. In main.ts: replace
+          TerritoryRenderer with TerrainRenderer, replace FogRenderer with FogOfWar,
+          add TerritoryStateManager + ThreatRenderer + ScreenEffects. Route unit
+          movement events to TerritoryStateManager. Route threat WebSocket events to
+          ThreatRenderer. Wire TerritoryStateManager.onChange to TerrainRenderer and
+          FogOfWar updates. In server/index.ts: import and start ThreatDataBridge,
+          wire its callbacks to broadcast(). In shared/types.ts: add ThreatEvent type
+          and threat/threat_resolved to ServerMessage union. KEEP all existing
+          functionality (floating panel, combat, movement, hooks). Do NOT rewrite
+          files from scratch — use surgical edits.
+
+      - id: W1-validate
+        component: Validator
+        type: validator
+        model: sonnet
+        spec: |
+          1. Run npx vite build — must pass with zero errors
+          2. Check for circular imports in new files
+          3. Verify all new files exist and are non-empty
+          4. Verify import chains don't pull in removed files
+          5. Run dev server, curl localhost:4002, verify HTML returns
+          6. Check that TerritoryRenderer references are updated to TerrainRenderer
+          7. Verify no regressions: FloatingUnitPanel, CombatAnimator, MovementManager still imported
+          8. Run the full 08-build-failure-patterns checklist
+          Report: PASS or FAIL with specifics. Max 3 Self-Zero fix cycles.

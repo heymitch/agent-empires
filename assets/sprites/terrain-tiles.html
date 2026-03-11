@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Empires — Terrain Tile Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:wght@400;500&family=JetBrains+Mono:wght@400;600&family=Orbitron:wght@600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --anthropic-dark: #141413;
+            --anthropic-light: #faf9f5;
+            --anthropic-mid-gray: #b0aea5;
+            --anthropic-light-gray: #e8e6dc;
+            --anthropic-orange: #d97757;
+            --anthropic-blue: #6a9bcc;
+            --anthropic-green: #788c5d;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, var(--anthropic-light) 0%, #f5f3ee 100%);
+            min-height: 100vh;
+            color: var(--anthropic-dark);
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .sidebar {
+            width: 320px;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(20, 20, 19, 0.1);
+            overflow-y: auto;
+            overflow-x: hidden;
+            max-height: 100vh;
+            position: sticky;
+            top: 20px;
+        }
+
+        .sidebar h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--anthropic-dark);
+            margin-bottom: 8px;
+        }
+
+        .sidebar .subtitle {
+            color: var(--anthropic-mid-gray);
+            font-size: 13px;
+            margin-bottom: 24px;
+            line-height: 1.4;
+        }
+
+        .control-section { margin-bottom: 24px; }
+
+        .control-section h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--anthropic-dark);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-section h3::before {
+            content: '\25C6';
+            color: var(--anthropic-orange);
+            font-size: 10px;
+        }
+
+        .seed-input {
+            width: 100%;
+            background: var(--anthropic-light);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            margin-bottom: 10px;
+            border: 1px solid var(--anthropic-light-gray);
+            text-align: center;
+        }
+
+        .seed-input:focus {
+            outline: none;
+            border-color: var(--anthropic-orange);
+            box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.1);
+            background: white;
+        }
+
+        .seed-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .control-group { margin-bottom: 16px; }
+
+        .control-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--anthropic-dark);
+            margin-bottom: 6px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider-container input[type="range"] {
+            flex: 1;
+            height: 4px;
+            background: var(--anthropic-light-gray);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: var(--anthropic-orange);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .slider-container input[type="range"]::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            background: var(--anthropic-orange);
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+        }
+
+        .value-display {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--anthropic-mid-gray);
+            min-width: 50px;
+            text-align: right;
+        }
+
+        .button {
+            background: var(--anthropic-orange);
+            color: white;
+            border: none;
+            padding: 9px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .button:hover {
+            background: #c86641;
+            transform: translateY(-1px);
+        }
+
+        .button:active { transform: translateY(0); }
+        .button.secondary { background: var(--anthropic-blue); }
+        .button.secondary:hover { background: #5a8bb8; }
+        .button.tertiary { background: var(--anthropic-green); }
+        .button.tertiary:hover { background: #6b7b52; }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .button-row .button { flex: 1; }
+
+        .canvas-area {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #canvas-container {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(20, 20, 19, 0.1);
+            background: #0a0a0f;
+        }
+
+        #canvas-container canvas {
+            display: block;
+        }
+
+        .section-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--anthropic-dark);
+            padding: 12px 0 4px;
+            letter-spacing: 0.05em;
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: var(--anthropic-mid-gray);
+            font-family: 'JetBrains Mono', monospace;
+            margin-top: 4px;
+        }
+
+        @media (max-width: 800px) {
+            .container { flex-direction: column; }
+            .sidebar { width: 100%; position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h1>TERRAIN TILES</h1>
+            <div class="subtitle">Agent Empires Isometric Tile Set<br>7 Biomes / 4 Types / 7 Roads = ~35 Tiles</div>
+
+            <!-- Seed Section -->
+            <div class="control-section">
+                <h3>Seed</h3>
+                <input type="number" id="seed-input" class="seed-input" value="42" onchange="updateSeed()">
+                <div class="seed-controls">
+                    <button class="button secondary" onclick="previousSeed()">&#8592; Prev</button>
+                    <button class="button secondary" onclick="nextSeed()">Next &#8594;</button>
+                </div>
+                <button class="button tertiary" onclick="randomSeedAndUpdate()">&#8635; Random</button>
+            </div>
+
+            <!-- Parameters -->
+            <div class="control-section">
+                <h3>Parameters</h3>
+
+                <div class="control-group">
+                    <label>Noise Scale</label>
+                    <div class="slider-container">
+                        <input type="range" id="noiseScale" min="0.01" max="0.08" step="0.005" value="0.04" oninput="updateParam('noiseScale', this.value)">
+                        <span class="value-display" id="noiseScale-value">0.04</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Circuit Density</label>
+                    <div class="slider-container">
+                        <input type="range" id="circuitDensity" min="0.1" max="1.0" step="0.05" value="0.4" oninput="updateParam('circuitDensity', this.value)">
+                        <span class="value-display" id="circuitDensity-value">0.4</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Texture Octaves</label>
+                    <div class="slider-container">
+                        <input type="range" id="octaves" min="1" max="6" step="1" value="4" oninput="updateParam('octaves', this.value)">
+                        <span class="value-display" id="octaves-value">4</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Glow Intensity</label>
+                    <div class="slider-container">
+                        <input type="range" id="glowIntensity" min="0.2" max="2.0" step="0.1" value="1.0" oninput="updateParam('glowIntensity', this.value)">
+                        <span class="value-display" id="glowIntensity-value">1.0</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Edge Blend Width</label>
+                    <div class="slider-container">
+                        <input type="range" id="edgeBlend" min="4" max="24" step="2" value="12" oninput="updateParam('edgeBlend', this.value)">
+                        <span class="value-display" id="edgeBlend-value">12</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Road Particle Speed</label>
+                    <div class="slider-container">
+                        <input type="range" id="roadSpeed" min="0.5" max="4.0" step="0.25" value="1.5" oninput="updateParam('roadSpeed', this.value)">
+                        <span class="value-display" id="roadSpeed-value">1.5</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="control-section">
+                <h3>Actions</h3>
+                <button class="button" onclick="regenerate()" style="margin-bottom: 8px;">&#9654; Regenerate All</button>
+                <button class="button secondary" onclick="downloadTileSheet()" style="margin-bottom: 8px;">&#11015; Download PNG Tile Sheet</button>
+                <div class="button-row">
+                    <button class="button tertiary" onclick="resetParameters()">Reset</button>
+                </div>
+            </div>
+
+            <div class="info-text">
+                Tiles: 128x64 isometric diamonds<br>
+                Biomes: HQ, Lead-Gen, Sales, Fulfillment, Support, Retention<br>
+                Types: Center, Edge, Feature, Road Overlay<br>
+                + 7 Road variants (Levels 0-6)
+            </div>
+        </div>
+
+        <div class="canvas-area">
+            <div class="section-label">TILE SHEET + PREVIEW MAP</div>
+            <div id="canvas-container"></div>
+        </div>
+    </div>
+
+    <script>
+    // ======================================================================
+    // PARAMETERS
+    // ======================================================================
+    let params = {
+        seed: 42,
+        noiseScale: 0.04,
+        circuitDensity: 0.4,
+        octaves: 4,
+        glowIntensity: 1.0,
+        edgeBlend: 12,
+        roadSpeed: 1.5
+    };
+    let defaultParams = { ...params };
+
+    // ======================================================================
+    // BIOME DEFINITIONS
+    // ======================================================================
+    const BIOMES = [
+        { name: 'HQ',          base: [58, 58, 58],    accent: [0, 255, 204],   style: 'stone' },
+        { name: 'Lead-Gen',    base: [42, 74, 58],    accent: [51, 255, 119],  style: 'organic' },
+        { name: 'Sales',       base: [74, 58, 42],    accent: [255, 215, 0],   style: 'urban' },
+        { name: 'Fulfillment', base: [58, 42, 74],    accent: [123, 104, 238], style: 'industrial' },
+        { name: 'Support',     base: [74, 42, 42],    accent: [255, 100, 100], style: 'outpost' },
+        { name: 'Retention',   base: [42, 42, 74],    accent: [100, 140, 255], style: 'fortress' },
+    ];
+
+    const TILE_W = 128;
+    const TILE_H = 64;
+    const TILE_TYPES = ['center', 'edge', 'feature', 'road'];
+    const ROAD_LEVELS = 7; // 0=none/dim trail through 6=blazing highway
+
+    // Layout: 6 biomes * 4 types = 24 tiles in top grid, 7 road tiles below, then preview map
+    const COLS = 6;
+    const TILE_ROWS_BIOME = 4; // one row per tile type
+    const PADDING = 8;
+    const LABEL_H = 22;
+    const BIOME_LABEL_H = 28;
+
+    const sheetW = COLS * (TILE_W + PADDING) + PADDING;
+    const biomeGridH = BIOME_LABEL_H + TILE_ROWS_BIOME * (TILE_H + LABEL_H + PADDING) + PADDING;
+    const roadRowH = LABEL_H + TILE_H + PADDING;
+    const roadSectionH = BIOME_LABEL_H + roadRowH + PADDING;
+
+    const PREVIEW_COLS = 7;
+    const PREVIEW_ROWS = 5;
+    const previewW = PREVIEW_COLS * TILE_W;
+    const previewH = PREVIEW_ROWS * (TILE_H / 2) + TILE_H / 2;
+    const previewSectionH = BIOME_LABEL_H + previewH + 40;
+
+    const totalH = biomeGridH + roadSectionH + previewSectionH + 40;
+
+    // Tile graphics stored for preview map assembly
+    let tileGraphics = {};
+    let roadGraphics = [];
+    let frameCount_ = 0;
+
+    // Simplex-style noise via p5's built-in Perlin noise
+    function fbm(x, y, octaves, scale) {
+        let val = 0;
+        let amp = 1;
+        let freq = scale;
+        let maxVal = 0;
+        for (let o = 0; o < octaves; o++) {
+            val += amp * noise(x * freq, y * freq);
+            maxVal += amp;
+            amp *= 0.5;
+            freq *= 2.0;
+        }
+        return val / maxVal;
+    }
+
+    // Seeded hash for deterministic per-tile variation
+    function tileHash(biomeIdx, typeIdx, px, py) {
+        let h = biomeIdx * 1000 + typeIdx * 100 + px * 31 + py * 17;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        return (h & 0xffff) / 65535.0;
+    }
+
+    function setup() {
+        let canvas = createCanvas(sheetW, totalH);
+        canvas.parent('canvas-container');
+        pixelDensity(1);
+        noLoop();
+        regenerate();
+    }
+
+    function regenerate() {
+        randomSeed(params.seed);
+        noiseSeed(params.seed);
+        tileGraphics = {};
+        roadGraphics = [];
+
+        background(10, 10, 15);
+
+        // ---- BIOME TILE GRID ----
+        drawSectionHeader(PADDING, PADDING, 'BIOME TILES');
+        let startY = PADDING + BIOME_LABEL_H;
+
+        for (let t = 0; t < TILE_TYPES.length; t++) {
+            let rowY = startY + t * (TILE_H + LABEL_H + PADDING);
+
+            // Row label
+            fill(180);
+            noStroke();
+            textFont('JetBrains Mono');
+            textSize(10);
+            textAlign(LEFT, TOP);
+            text(TILE_TYPES[t].toUpperCase(), PADDING, rowY);
+
+            for (let b = 0; b < BIOMES.length; b++) {
+                let tileX = PADDING + b * (TILE_W + PADDING);
+                let tileY = rowY + LABEL_H;
+
+                // Column label on first row
+                if (t === 0) {
+                    fill(BIOMES[b].accent[0], BIOMES[b].accent[1], BIOMES[b].accent[2]);
+                    textSize(9);
+                    textAlign(CENTER, BOTTOM);
+                    text(BIOMES[b].name, tileX + TILE_W / 2, rowY - 2);
+                }
+
+                let g = createGraphics(TILE_W, TILE_H);
+                renderBiomeTile(g, b, t);
+
+                image(g, tileX, tileY);
+
+                let key = BIOMES[b].name + '_' + TILE_TYPES[t];
+                tileGraphics[key] = g;
+            }
+        }
+
+        // ---- ROAD TILES ----
+        let roadStartY = biomeGridH + 10;
+        drawSectionHeader(PADDING, roadStartY, 'ROAD / DATA PATH TILES (Levels 0-6)');
+
+        let roadY = roadStartY + BIOME_LABEL_H;
+        for (let r = 0; r < ROAD_LEVELS; r++) {
+            let rx = PADDING + r * (TILE_W + PADDING);
+
+            fill(180);
+            noStroke();
+            textFont('JetBrains Mono');
+            textSize(10);
+            textAlign(CENTER, TOP);
+            text('L' + r, rx + TILE_W / 2, roadY);
+
+            let g = createGraphics(TILE_W, TILE_H);
+            renderRoadTile(g, r);
+            image(g, rx, roadY + LABEL_H);
+            roadGraphics.push(g);
+        }
+
+        // ---- PREVIEW MAP ----
+        let previewStartY = biomeGridH + roadSectionH + 20;
+        drawSectionHeader(PADDING, previewStartY, 'PREVIEW MAP (5x7 ASSEMBLED)');
+        renderPreviewMap(PADDING, previewStartY + BIOME_LABEL_H + 4);
+    }
+
+    function drawSectionHeader(x, y, label) {
+        fill(0, 255, 204);
+        noStroke();
+        textFont('Orbitron');
+        textSize(12);
+        textAlign(LEFT, TOP);
+        text(label, x, y);
+
+        stroke(0, 255, 204, 60);
+        strokeWeight(1);
+        line(x, y + 16, sheetW - PADDING, y + 16);
+        noStroke();
+    }
+
+    // ======================================================================
+    // TILE RENDERING
+    // ======================================================================
+
+    function renderBiomeTile(g, biomeIdx, typeIdx) {
+        let biome = BIOMES[biomeIdx];
+        let bR = biome.base[0], bG = biome.base[1], bB = biome.base[2];
+        let aR = biome.accent[0], aG = biome.accent[1], aB = biome.accent[2];
+
+        g.loadPixels();
+        let d = g.pixelDensity();
+        let pw = g.width * d;
+        let ph = g.height * d;
+
+        for (let py = 0; py < ph; py++) {
+            for (let px = 0; px < pw; px++) {
+                // Map pixel to tile coordinate space
+                let tx = px / d;
+                let ty = py / d;
+
+                // Isometric diamond mask
+                let cx = TILE_W / 2;
+                let cy = TILE_H / 2;
+                let dx = Math.abs(tx - cx) / cx;
+                let dy = Math.abs(ty - cy) / cy;
+                let diamond = dx + dy;
+
+                if (diamond > 1.0) {
+                    // Outside diamond
+                    let idx = 4 * (py * pw + px);
+                    g.pixels[idx] = 0;
+                    g.pixels[idx + 1] = 0;
+                    g.pixels[idx + 2] = 0;
+                    g.pixels[idx + 3] = 0;
+                    continue;
+                }
+
+                // Edge anti-alias
+                let edgeDist = 1.0 - diamond;
+                let alpha = Math.min(1.0, edgeDist * TILE_H * 0.5);
+
+                // Noise-based terrain texture
+                let nxBase = (tx + biomeIdx * 200) * params.noiseScale;
+                let nyBase = (ty + typeIdx * 200) * params.noiseScale;
+                let n = fbm(nxBase, nyBase, params.octaves, 1.0);
+
+                // Style-specific modulation
+                let styleVal = applyBiomeStyle(tx, ty, n, biome.style, biomeIdx, typeIdx);
+
+                // Base color with noise variation
+                let brightness = 0.7 + styleVal * 0.6;
+                let r = bR * brightness;
+                let gv = bG * brightness;
+                let b = bB * brightness;
+
+                // Circuit grid overlay
+                let circuitVal = getCircuitPattern(tx, ty, biome.style, biomeIdx);
+                if (circuitVal > 0) {
+                    let ci = circuitVal * params.circuitDensity * params.glowIntensity;
+                    r = lerp_(r, aR, ci * 0.4);
+                    gv = lerp_(gv, aG, ci * 0.4);
+                    b = lerp_(b, aB, ci * 0.4);
+                }
+
+                // Edge tile: gradient fade on right side
+                if (typeIdx === 1) {
+                    let edgeFade = Math.max(0, (tx - TILE_W * 0.5) / (TILE_W * 0.5));
+                    edgeFade = Math.pow(edgeFade, 1.5);
+                    let darkR = 20, darkG = 20, darkB = 25;
+                    r = lerp_(r, darkR, edgeFade * 0.7);
+                    gv = lerp_(gv, darkG, edgeFade * 0.7);
+                    b = lerp_(b, darkB, edgeFade * 0.7);
+                }
+
+                // Feature tile: add landmark glow at center
+                if (typeIdx === 2) {
+                    let featureDist = Math.sqrt(Math.pow(tx - cx, 2) / (cx * cx) + Math.pow(ty - cy, 2) / (cy * cy));
+                    if (featureDist < 0.5) {
+                        let featureGlow = (1 - featureDist / 0.5) * params.glowIntensity;
+                        featureGlow *= featureGlow;
+                        r = lerp_(r, aR, featureGlow * 0.6);
+                        gv = lerp_(gv, aG, featureGlow * 0.6);
+                        b = lerp_(b, aB, featureGlow * 0.6);
+                        // Feature structure (different per biome)
+                        let featurePattern = getFeaturePattern(tx, ty, cx, cy, biome.style, biomeIdx);
+                        if (featurePattern > 0) {
+                            r = lerp_(r, aR, featurePattern * 0.8);
+                            gv = lerp_(gv, aG, featurePattern * 0.8);
+                            b = lerp_(b, aB, featurePattern * 0.8);
+                        }
+                    }
+                }
+
+                // Road overlay tile: add glowing path across center
+                if (typeIdx === 3) {
+                    let roadDist = Math.abs(ty - cy) / cy;
+                    if (roadDist < 0.3) {
+                        let roadGlow = (1 - roadDist / 0.3) * params.glowIntensity * 0.7;
+                        // Animated-feel dashes
+                        let dashPhase = Math.floor(tx / 8) % 3;
+                        if (dashPhase === 0) roadGlow *= 1.2;
+                        r = lerp_(r, 0, roadGlow * 0.3);
+                        gv = lerp_(gv, 255, roadGlow * 0.15);
+                        b = lerp_(b, 204, roadGlow * 0.2);
+                        // Cyan road line
+                        if (roadDist < 0.08) {
+                            r = lerp_(r, 0, 0.6);
+                            gv = lerp_(gv, 255, 0.6);
+                            b = lerp_(b, 204, 0.6);
+                        }
+                    }
+                }
+
+                // Subtle grid lines (circuit board)
+                let gridX = tx % 16 < 0.7 ? 1 : 0;
+                let gridY = ty % 16 < 0.7 ? 1 : 0;
+                if ((gridX || gridY) && diamond < 0.95) {
+                    let gridAlpha = 0.08 * params.circuitDensity;
+                    r = lerp_(r, aR, gridAlpha);
+                    gv = lerp_(gv, aG, gridAlpha);
+                    b = lerp_(b, aB, gridAlpha);
+                }
+
+                // Diamond edge highlight
+                if (diamond > 0.9 && diamond <= 1.0) {
+                    let edgeHighlight = (diamond - 0.9) / 0.1;
+                    r = lerp_(r, aR, edgeHighlight * 0.15 * params.glowIntensity);
+                    gv = lerp_(gv, aG, edgeHighlight * 0.15 * params.glowIntensity);
+                    b = lerp_(b, aB, edgeHighlight * 0.15 * params.glowIntensity);
+                }
+
+                let idx = 4 * (py * pw + px);
+                g.pixels[idx] = clamp_(r);
+                g.pixels[idx + 1] = clamp_(gv);
+                g.pixels[idx + 2] = clamp_(b);
+                g.pixels[idx + 3] = Math.floor(alpha * 255);
+            }
+        }
+        g.updatePixels();
+    }
+
+    function applyBiomeStyle(tx, ty, n, style, biomeIdx, typeIdx) {
+        let offset = biomeIdx * 500 + typeIdx * 300;
+        switch (style) {
+            case 'stone': {
+                // Angular, sharp threshold cuts
+                let s = fbm(tx * 0.06 + offset, ty * 0.06, params.octaves, 1.0);
+                return s > 0.5 ? 0.8 : 0.3 + n * 0.3;
+            }
+            case 'organic': {
+                // Smooth, rolling
+                let s = fbm(tx * 0.03 + offset, ty * 0.03, params.octaves + 1, 1.0);
+                return 0.4 + s * 0.5;
+            }
+            case 'urban': {
+                // Grid-based with noise weathering
+                let gridVal = ((Math.floor(tx / 12) + Math.floor(ty / 8)) % 2 === 0) ? 0.7 : 0.4;
+                let wear = fbm(tx * 0.05 + offset, ty * 0.05, 2, 1.0) * 0.3;
+                return gridVal + wear;
+            }
+            case 'industrial': {
+                // Conveyor patterns + machinery marks
+                let conveyor = Math.sin(tx * 0.15 + offset * 0.01) * 0.3 + 0.5;
+                let marks = fbm(tx * 0.08 + offset, ty * 0.08, 3, 1.0) * 0.3;
+                return conveyor + marks;
+            }
+            case 'outpost': {
+                // Field/medical station -- crosshatch supply lines
+                let hatch1 = Math.sin((tx + ty) * 0.2 + offset * 0.01) > 0.7 ? 0.2 : 0;
+                let base = fbm(tx * 0.04 + offset, ty * 0.04, params.octaves, 1.0);
+                return 0.4 + base * 0.4 + hatch1;
+            }
+            case 'fortress': {
+                // Heavy stone, fortified patterns
+                let block = ((Math.floor(tx / 16) + Math.floor(ty / 10)) % 3 === 0) ? 0.6 : 0.35;
+                let s = fbm(tx * 0.04 + offset, ty * 0.04, params.octaves, 1.0) * 0.25;
+                return block + s;
+            }
+            default:
+                return n;
+        }
+    }
+
+    function getCircuitPattern(tx, ty, style, biomeIdx) {
+        let offset = biomeIdx * 777;
+        // Circuit traces along noise gradient
+        let n1 = noise((tx + offset) * 0.02, ty * 0.02);
+        let n2 = noise((tx + offset) * 0.02 + 0.01, ty * 0.02);
+        let n3 = noise((tx + offset) * 0.02, ty * 0.02 + 0.01);
+        let gradMag = Math.sqrt(Math.pow(n2 - n1, 2) + Math.pow(n3 - n1, 2));
+
+        // Threshold for circuit lines
+        let threshold = 0.003 + (1 - params.circuitDensity) * 0.01;
+        if (gradMag > threshold && gradMag < threshold + 0.002) {
+            return 1.0;
+        }
+
+        // Node points at regular intervals
+        let nodeX = tx % 32 < 2 && ty % 32 < 2;
+        if (nodeX && n1 > 0.5) return 0.7;
+
+        return 0;
+    }
+
+    function getFeaturePattern(tx, ty, cx, cy, style, biomeIdx) {
+        let dx = tx - cx;
+        let dy = ty - cy;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        let angle = Math.atan2(dy, dx);
+
+        switch (style) {
+            case 'stone': {
+                // Command tower -- concentric rings + cross
+                if (Math.abs(dist - 12) < 1.5 || Math.abs(dist - 8) < 1) return 0.9;
+                if ((Math.abs(dx) < 1.5 || Math.abs(dy) < 1.5) && dist < 14) return 0.7;
+                return 0;
+            }
+            case 'organic': {
+                // Beacon -- radiating spokes
+                let spokes = Math.sin(angle * 6) > 0.8 && dist < 16 && dist > 4 ? 0.8 : 0;
+                let ring = Math.abs(dist - 10) < 1 ? 0.9 : 0;
+                return Math.max(spokes, ring);
+            }
+            case 'urban': {
+                // Market stall -- rectangular outline
+                if (Math.abs(dx) < 14 && Math.abs(dy) < 8) {
+                    if (Math.abs(Math.abs(dx) - 14) < 1.5 || Math.abs(Math.abs(dy) - 8) < 1.5) return 0.8;
+                }
+                return 0;
+            }
+            case 'industrial': {
+                // Gear/machine -- gear teeth pattern
+                let gearR = 12;
+                let teeth = Math.sin(angle * 8) * 3;
+                if (Math.abs(dist - gearR - teeth) < 1.5) return 0.9;
+                if (dist < 4) return 0.6;
+                return 0;
+            }
+            case 'outpost': {
+                // Medical cross
+                if ((Math.abs(dx) < 3 && Math.abs(dy) < 12) || (Math.abs(dx) < 12 && Math.abs(dy) < 3)) {
+                    if ((Math.abs(dx) < 3 && Math.abs(dy) < 12) || (Math.abs(dx) < 12 && Math.abs(dy) < 3)) return 0.8;
+                }
+                return 0;
+            }
+            case 'fortress': {
+                // Shield/fortification -- diamond shape
+                let shieldDist = Math.abs(dx) / 16 + Math.abs(dy) / 12;
+                if (Math.abs(shieldDist - 0.8) < 0.06) return 0.9;
+                if (Math.abs(shieldDist - 0.5) < 0.05) return 0.6;
+                return 0;
+            }
+            default:
+                return 0;
+        }
+    }
+
+    // ======================================================================
+    // ROAD TILES
+    // ======================================================================
+
+    function renderRoadTile(g, level) {
+        g.loadPixels();
+        let d = g.pixelDensity();
+        let pw = g.width * d;
+        let ph = g.height * d;
+
+        let cx = TILE_W / 2;
+        let cy = TILE_H / 2;
+
+        // Road intensity increases with level
+        let intensity = level / 6.0;
+        let roadWidth = 2 + level * 3; // pixels from centerline
+
+        for (let py = 0; py < ph; py++) {
+            for (let px = 0; px < pw; px++) {
+                let tx = px / d;
+                let ty = py / d;
+
+                // Diamond mask
+                let dxm = Math.abs(tx - cx) / cx;
+                let dym = Math.abs(ty - cy) / cy;
+                let diamond = dxm + dym;
+
+                if (diamond > 1.0) {
+                    let idx = 4 * (py * pw + px);
+                    g.pixels[idx] = 0;
+                    g.pixels[idx + 1] = 0;
+                    g.pixels[idx + 2] = 0;
+                    g.pixels[idx + 3] = 0;
+                    continue;
+                }
+
+                let edgeDist = 1.0 - diamond;
+                let alpha = Math.min(1.0, edgeDist * TILE_H * 0.5);
+
+                // Dark base
+                let r = 14, gv = 14, b = 20;
+
+                // Road centerline distance (horizontal road)
+                let roadDist = Math.abs(ty - cy);
+
+                if (level === 0) {
+                    // No road -- just dark tile
+                    // Faint noise
+                    let n = fbm(tx * 0.05 + 999, ty * 0.05, 2, 1.0);
+                    r += n * 8;
+                    gv += n * 8;
+                    b += n * 10;
+                } else if (roadDist < roadWidth) {
+                    let roadFade = 1.0 - roadDist / roadWidth;
+                    roadFade = Math.pow(roadFade, 0.8);
+
+                    if (level <= 2) {
+                        // Dotted/thin trail
+                        let dashOn = Math.floor(tx / (10 - level * 2)) % 2 === 0;
+                        let dotIntensity = dashOn ? roadFade * intensity : roadFade * intensity * 0.15;
+                        r = lerp_(r, 0, dotIntensity * 0.3);
+                        gv = lerp_(gv, 255 * intensity, dotIntensity * 0.6);
+                        b = lerp_(b, 204 * intensity, dotIntensity * 0.5);
+                    } else {
+                        // Solid glowing highway
+                        let glowAmount = roadFade * intensity * params.glowIntensity;
+
+                        // Particle stream effect (static representation)
+                        let particlePhase = Math.sin(tx * 0.3 + ty * 0.1 + params.seed * 0.1);
+                        let particleBright = particlePhase > 0.5 ? 1.3 : 1.0;
+
+                        r = lerp_(r, 0, glowAmount * 0.2);
+                        gv = lerp_(gv, 255, glowAmount * 0.7 * particleBright);
+                        b = lerp_(b, 204, glowAmount * 0.6 * particleBright);
+
+                        // Edge glow bloom
+                        if (roadDist > roadWidth * 0.7) {
+                            let bloomFade = (roadDist - roadWidth * 0.7) / (roadWidth * 0.3);
+                            gv = lerp_(gv, 255, (1 - bloomFade) * 0.15 * intensity);
+                            b = lerp_(b, 204, (1 - bloomFade) * 0.12 * intensity);
+                        }
+                    }
+
+                    // Center line (bright core)
+                    if (roadDist < 1.5 && level >= 3) {
+                        r = lerp_(r, 100, 0.3);
+                        gv = lerp_(gv, 255, 0.7);
+                        b = lerp_(b, 230, 0.6);
+                    }
+                } else {
+                    // Outside road -- faint ambient
+                    let n = fbm(tx * 0.04 + 999, ty * 0.04, 2, 1.0);
+                    r += n * 6;
+                    gv += n * 6;
+                    b += n * 8;
+
+                    // Subtle bloom for high-level roads
+                    if (level >= 4) {
+                        let bloomDist = roadDist - roadWidth;
+                        if (bloomDist < 10) {
+                            let bloom = (1 - bloomDist / 10) * intensity * 0.15;
+                            gv += 255 * bloom * 0.3;
+                            b += 204 * bloom * 0.25;
+                        }
+                    }
+                }
+
+                let idx = 4 * (py * pw + px);
+                g.pixels[idx] = clamp_(r);
+                g.pixels[idx + 1] = clamp_(gv);
+                g.pixels[idx + 2] = clamp_(b);
+                g.pixels[idx + 3] = Math.floor(alpha * 255);
+            }
+        }
+        g.updatePixels();
+    }
+
+    // ======================================================================
+    // PREVIEW MAP
+    // ======================================================================
+
+    function renderPreviewMap(startX, startY) {
+        // 7 columns x 5 rows isometric map
+        // Assign biomes in a strategic layout
+        let mapLayout = [
+            // row 0
+            [1, 1, 0, 0, 5, 5, 5],
+            // row 1
+            [1, 1, 0, 0, 5, 5, 4],
+            // row 2
+            [2, 2, 3, 3, 3, 4, 4],
+            // row 3
+            [2, 2, 3, 3, 3, 4, 4],
+            // row 4
+            [2, 2, 2, 3, 3, 4, 4],
+        ];
+
+        // Road placement (connects territories)
+        let roadMap = [
+            [0, 0, 3, 0, 0, 0, 0],
+            [0, 3, 5, 3, 0, 0, 0],
+            [0, 0, 3, 5, 3, 0, 0],
+            [0, 0, 0, 3, 5, 3, 0],
+            [0, 0, 0, 0, 3, 0, 0],
+        ];
+
+        for (let row = 0; row < PREVIEW_ROWS; row++) {
+            for (let col = 0; col < PREVIEW_COLS; col++) {
+                let biomeIdx = mapLayout[row][col];
+                let roadLevel = roadMap[row][col];
+
+                // Isometric positioning
+                let isoX = startX + col * (TILE_W / 2) + (row % 2) * (TILE_W / 4);
+                let isoY = startY + row * (TILE_H / 2);
+
+                // Determine tile type: edges where biome borders differ
+                let isEdge = false;
+                if (col < PREVIEW_COLS - 1 && mapLayout[row][col + 1] !== biomeIdx) isEdge = true;
+                if (row < PREVIEW_ROWS - 1 && mapLayout[row + 1][col] !== biomeIdx) isEdge = true;
+
+                let typeStr = isEdge ? 'edge' : 'center';
+                let key = BIOMES[biomeIdx].name + '_' + typeStr;
+
+                if (tileGraphics[key]) {
+                    image(tileGraphics[key], isoX, isoY);
+                }
+
+                // Overlay road if present
+                if (roadLevel > 0 && roadGraphics[roadLevel]) {
+                    // Blend road on top with some transparency
+                    push();
+                    tint(255, 180);
+                    image(roadGraphics[roadLevel], isoX, isoY);
+                    pop();
+                }
+            }
+        }
+
+        // Legend
+        let legendY = startY + previewH - 10;
+        fill(100);
+        noStroke();
+        textFont('JetBrains Mono');
+        textSize(9);
+        textAlign(LEFT, TOP);
+        text('HQ=gray  Lead-Gen=green  Sales=amber  Fulfillment=purple  Support=red  Retention=navy', startX, legendY);
+    }
+
+    // ======================================================================
+    // UTILITY
+    // ======================================================================
+
+    function lerp_(a, b, t) { return a + (b - a) * t; }
+    function clamp_(v) { return Math.max(0, Math.min(255, Math.floor(v))); }
+
+    // ======================================================================
+    // DOWNLOAD
+    // ======================================================================
+
+    function downloadTileSheet() {
+        saveCanvas('agent-empires-terrain-tiles-seed' + params.seed, 'png');
+    }
+
+    // ======================================================================
+    // UI CONTROL HANDLERS
+    // ======================================================================
+
+    function updateParam(paramName, value) {
+        params[paramName] = parseFloat(value);
+        document.getElementById(paramName + '-value').textContent = value;
+        regenerate();
+    }
+
+    function updateSeedDisplay() {
+        document.getElementById('seed-input').value = params.seed;
+    }
+
+    function updateSeed() {
+        let input = document.getElementById('seed-input');
+        let newSeed = parseInt(input.value);
+        if (newSeed && newSeed > 0) {
+            params.seed = newSeed;
+            regenerate();
+        } else {
+            updateSeedDisplay();
+        }
+    }
+
+    function previousSeed() {
+        params.seed = Math.max(1, params.seed - 1);
+        updateSeedDisplay();
+        regenerate();
+    }
+
+    function nextSeed() {
+        params.seed = params.seed + 1;
+        updateSeedDisplay();
+        regenerate();
+    }
+
+    function randomSeedAndUpdate() {
+        params.seed = Math.floor(Math.random() * 999999) + 1;
+        updateSeedDisplay();
+        regenerate();
+    }
+
+    function resetParameters() {
+        params = { ...defaultParams };
+        document.getElementById('noiseScale').value = params.noiseScale;
+        document.getElementById('noiseScale-value').textContent = params.noiseScale;
+        document.getElementById('circuitDensity').value = params.circuitDensity;
+        document.getElementById('circuitDensity-value').textContent = params.circuitDensity;
+        document.getElementById('octaves').value = params.octaves;
+        document.getElementById('octaves-value').textContent = params.octaves;
+        document.getElementById('glowIntensity').value = params.glowIntensity;
+        document.getElementById('glowIntensity-value').textContent = params.glowIntensity;
+        document.getElementById('edgeBlend').value = params.edgeBlend;
+        document.getElementById('edgeBlend-value').textContent = params.edgeBlend;
+        document.getElementById('roadSpeed').value = params.roadSpeed;
+        document.getElementById('roadSpeed-value').textContent = params.roadSpeed;
+        updateSeedDisplay();
+        regenerate();
+    }
+
+    window.addEventListener('load', function () {
+        updateSeedDisplay();
+    });
+    </script>
+</body>
+</html>

@@ -1,25 +1,20 @@
 {
-  "name": "vibecraft",
-  "version": "0.1.15",
-  "description": "3D visualization of Claude Code as an interactive workshop",
-  "author": "nearcyan",
+  "name": "agent-empires",
+  "version": "0.1.0",
+  "description": "RTS command center for AI business agents",
+  "author": "heymitch",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/nearcyan/vibecraft"
-  },
   "keywords": [
     "claude",
     "claude-code",
-    "visualization",
-    "3d",
-    "vibecoding",
+    "rts",
+    "agents",
     "ai",
     "developer-tools"
   ],
   "type": "module",
   "bin": {
-    "vibecraft": "./bin/cli.js"
+    "agent-empires": "./bin/cli.js"
   },
   "files": [
     "bin/",
@@ -29,6 +24,7 @@
     "data/.gitkeep"
   ],
   "scripts": {
+    "predev": "node scripts/validate-config.js",
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",
@@ -45,13 +41,12 @@
   "dependencies": {
     "@deepgram/sdk": "^4.11.3",
     "chokidar": "^4.0.0",
-    "three": "^0.170.0",
+    "pixi.js": "^8.17.0",
     "tone": "^15.1.22",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/three": "^0.170.0",
     "@types/ws": "^8.5.13",
     "concurrently": "^9.0.0",
     "tsx": "^4.19.0",

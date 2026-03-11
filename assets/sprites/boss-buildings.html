@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Empires — Boss Building Sprites</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-void: #0a0a0f;
+            --bg-surface: #12121a;
+            --bg-elevated: #1a1a2e;
+            --accent-primary: #ff3366;
+            --accent-danger: #ff3366;
+            --accent-warning: #ffaa00;
+            --accent-gold: #ffd700;
+            --accent-success: #33ff77;
+            --text-primary: #e0e0e0;
+            --text-secondary: #808090;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--bg-surface);
+            border-bottom: 1px solid rgba(255,51,102,0.2);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 18px;
+            color: var(--accent-danger);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        .header .subtitle {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 8px 16px;
+            border: 1px solid rgba(255,51,102,0.3);
+            border-radius: 4px;
+            background: var(--bg-elevated);
+            color: var(--accent-danger);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            background: rgba(255,51,102,0.1);
+            border-color: var(--accent-danger);
+            box-shadow: 0 0 10px rgba(255,51,102,0.2);
+        }
+        .btn.primary {
+            background: rgba(255,51,102,0.15);
+            border-color: var(--accent-danger);
+        }
+        .legend {
+            background: var(--bg-surface);
+            padding: 12px 24px;
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,51,102,0.08);
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        .legend-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .grid-labels {
+            background: var(--bg-surface);
+            padding: 8px 24px;
+            display: grid;
+            grid-template-columns: 130px repeat(5, 1fr);
+            gap: 4px;
+            border-bottom: 1px solid rgba(255,51,102,0.08);
+        }
+        .grid-labels span {
+            font-family: 'Orbitron', monospace;
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-align: center;
+            letter-spacing: 0.05em;
+        }
+        .grid-labels span:first-child { text-align: left; }
+        .canvas-wrap {
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            overflow: auto;
+        }
+        #canvas-container canvas { display: block; }
+        #scale-canvas-container canvas { display: block; }
+        .seed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .seed-control label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        .seed-control input[type="number"] {
+            width: 80px;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(255,51,102,0.2);
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent-danger);
+            text-align: center;
+        }
+        .seed-control input:focus {
+            outline: none;
+            border-color: var(--accent-danger);
+        }
+        .scale-demo {
+            background: var(--bg-surface);
+            border-top: 1px solid rgba(255,51,102,0.15);
+            padding: 16px 24px;
+        }
+        .scale-demo h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            color: var(--accent-danger);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+        .scale-controls {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .slider-group label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        .slider-group input[type="range"] {
+            width: 200px;
+            accent-color: var(--accent-danger);
+        }
+        .slider-group .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent-danger);
+            min-width: 55px;
+        }
+        .tier-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            color: var(--accent-warning);
+            padding: 4px 10px;
+            border: 1px solid rgba(255,170,0,0.3);
+            border-radius: 4px;
+            background: rgba(255,170,0,0.08);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>Boss Building Sprites</h1>
+            <div class="subtitle">6 buildings x 5 damage states // hostile red treatment // scaled by HP tier</div>
+        </div>
+        <div class="controls">
+            <div class="seed-control">
+                <label>SEED:</label>
+                <input type="number" id="seed-input" value="42" onchange="updateSeed()">
+                <button class="btn" onclick="prevSeed()">-</button>
+                <button class="btn" onclick="nextSeed()">+</button>
+                <button class="btn" onclick="randomSeed2()">RNG</button>
+            </div>
+            <button class="btn primary" onclick="downloadSpriteSheet()">DOWNLOAD PNG</button>
+        </div>
+    </div>
+    <div class="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:#4a1a1a"></div>Boss Base (Crimson)</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#ff3366"></div>Danger Glow</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#33ff77"></div>Victory (0% HP)</div>
+        <div class="legend-item" style="margin-left:auto">
+            <div class="legend-swatch" style="background:#3a3a3a; border:1px solid rgba(255,51,102,0.3)"></div>Territory Accent (subtle)
+        </div>
+    </div>
+    <div class="grid-labels">
+        <span>BUILDING</span>
+        <span>100% HP (HOSTILE)</span>
+        <span>75% HP</span>
+        <span>50% HP</span>
+        <span>25% HP</span>
+        <span>0% HP (VICTORY)</span>
+    </div>
+    <div class="canvas-wrap">
+        <div id="canvas-container"></div>
+    </div>
+
+    <!-- Scale Demo Section -->
+    <div class="scale-demo">
+        <h2>Boss Scale by HP/Difficulty</h2>
+        <div class="scale-controls">
+            <div class="slider-group">
+                <label>BOSS HP:</label>
+                <input type="range" id="hp-slider" min="1" max="24" value="5" oninput="updateScaleDemo()">
+                <span class="value" id="hp-value">5 HP</span>
+            </div>
+            <span class="tier-label" id="tier-label">MEDIUM (192x192)</span>
+        </div>
+        <div class="canvas-wrap" style="padding-top:0">
+            <div id="scale-canvas-container"></div>
+        </div>
+    </div>
+
+    <script>
+    // =========================================================================
+    // CONFIG
+    // =========================================================================
+    const SW = 192, SH = 192, COLS = 5, ROWS = 6, PAD = 4, LW = 130;
+    const CW = LW + COLS * (SW + PAD) + PAD;
+    const CH = ROWS * (SH + PAD) + PAD;
+    let currentSeed = 42;
+
+    // Boss size tiers
+    const SIZE_TIERS = [
+        { name: 'SMALL',  maxHP: 3,  size: 128, label: 'Small Outpost' },
+        { name: 'MEDIUM', maxHP: 8,  size: 192, label: 'Standard Building' },
+        { name: 'LARGE',  maxHP: 15, size: 256, label: 'Large Fortress' },
+        { name: 'MEGA',   maxHP: 999, size: 320, label: 'Massive Citadel' }
+    ];
+
+    function getTier(hp) {
+        for (let t of SIZE_TIERS) { if (hp <= t.maxHP) return t; }
+        return SIZE_TIERS[SIZE_TIERS.length - 1];
+    }
+
+    // Territory colors are now SUBTLE ACCENTS (10-20% blend)
+    // The dominant color is dark crimson for all boss buildings
+    const BOSS_CRIMSON = { base: [74,26,26], light: [90,32,32], dark: [50,18,18], roof: [65,22,28] };
+
+    // Territory accent colors (used at 10-20% mix)
+    const TERRITORY_ACCENTS = [
+        { name: 'HQ',          accent: [90,88,95],   flag: '#888899' },
+        { name: 'Lead-Gen',    accent: [55,95,72],   flag: '#44cc66' },
+        { name: 'Sales',       accent: [95,78,55],   flag: '#cc9944' },
+        { name: 'Fulfillment', accent: [78,60,100],  flag: '#9966cc' },
+        { name: 'Support',     accent: [100,58,58],  flag: '#cc5555' },
+        { name: 'Retention',   accent: [60,60,100],  flag: '#6666cc' }
+    ];
+
+    // Build the BLDGS array by blending crimson base with territory accent
+    const ACCENT_MIX = 0.15; // 15% territory color
+    const BLDGS = TERRITORY_ACCENTS.map(ta => {
+        return {
+            name: ta.name,
+            base: mixArr(BOSS_CRIMSON.base, ta.accent, ACCENT_MIX),
+            light: mixArr(BOSS_CRIMSON.light, ta.accent, ACCENT_MIX),
+            dark: mixArr(BOSS_CRIMSON.dark, ta.accent, ACCENT_MIX),
+            roof: mixArr(BOSS_CRIMSON.roof, ta.accent, ACCENT_MIX),
+            territoryAccent: ta.accent,
+            territoryFlag: ta.flag
+        };
+    });
+
+    function mixArr(a, b, t) {
+        return [
+            Math.round(a[0] * (1-t) + b[0] * t),
+            Math.round(a[1] * (1-t) + b[1] * t),
+            Math.round(a[2] * (1-t) + b[2] * t)
+        ];
+    }
+
+    const HP_STATES = [1.0, 0.75, 0.5, 0.25, 0.0];
+
+    // Seeded RNG
+    class RNG {
+        constructor(s) { this.s = s; }
+        n() { this.s = (this.s * 16807) % 2147483647; return (this.s - 1) / 2147483646; }
+        r(a, b) { return a + this.n() * (b - a); }
+        i(a, b) { return Math.floor(this.r(a, b + 1)); }
+    }
+    let R;
+
+    // =========================================================================
+    // P5 SETUP — Main Grid Canvas
+    // =========================================================================
+    let mainCanvas, scaleCanvas;
+
+    function setup() {
+        mainCanvas = createCanvas(CW, CH);
+        mainCanvas.parent('canvas-container');
+        pixelDensity(1);
+        noLoop();
+        renderAll();
+        // Create scale demo canvas
+        setupScaleDemo();
+    }
+
+    function renderAll() {
+        background(10, 10, 15);
+        for (let row = 0; row < ROWS; row++) {
+            // Label
+            push();
+            fill(100, 100, 120);
+            noStroke();
+            textFont('Orbitron, monospace');
+            textSize(11);
+            textAlign(LEFT, CENTER);
+            text(BLDGS[row].name.toUpperCase(), 10, PAD + row * (SH + PAD) + SH / 2);
+            pop();
+
+            for (let col = 0; col < COLS; col++) {
+                R = new RNG(currentSeed * 1000 + row * 100 + col * 10 + 7);
+                let x = LW + PAD + col * (SW + PAD);
+                let y = PAD + row * (SH + PAD);
+                let hp = HP_STATES[col];
+
+                // Cell bg
+                push();
+                noStroke();
+                fill(16, 16, 22);
+                rect(x, y, SW, SH, 3);
+                // Red-tinted border for boss cells
+                stroke(hp > 0 ? color(80, 20, 20) : color(30, 60, 30));
+                strokeWeight(1);
+                noFill();
+                rect(x, y, SW, SH, 3);
+                pop();
+
+                // Draw building centered in cell
+                push();
+                translate(x + SW / 2, y + SH / 2 + 16);
+                drawBuilding(row, hp, BLDGS[row]);
+                pop();
+            }
+        }
+    }
+
+    // =========================================================================
+    // SCALE DEMO — Side-by-side size comparison + HP slider
+    // =========================================================================
+    let scaleDemoHP = 5;
+    const SCALE_CW = 4 * 340 + 60;
+    const SCALE_CH = 380;
+
+    function setupScaleDemo() {
+        // We'll draw the scale demo on a separate graphics buffer
+        // rendered onto the main canvas area below
+        updateScaleDemo();
+    }
+
+    function updateScaleDemo() {
+        scaleDemoHP = parseInt(document.getElementById('hp-slider').value);
+        document.getElementById('hp-value').textContent = scaleDemoHP + ' HP';
+        let tier = getTier(scaleDemoHP);
+        document.getElementById('tier-label').textContent = tier.name + ' (' + tier.size + 'x' + tier.size + ')';
+
+        // Draw on a temporary p5 graphics
+        renderScaleDemo();
+    }
+
+    function renderScaleDemo() {
+        // Remove old scale canvas if any
+        let container = document.getElementById('scale-canvas-container');
+        container.innerHTML = '';
+
+        let pg = createGraphics(SCALE_CW, SCALE_CH);
+        pg.parent('scale-canvas-container');
+        pg.background(10, 10, 15);
+        pg.pixelDensity(1);
+
+        // Draw all 4 tiers side by side with the slider-selected building type
+        let xOff = 30;
+        let bldgIdx = 0; // Use HQ as demo building
+
+        for (let t = 0; t < SIZE_TIERS.length; t++) {
+            let tier = SIZE_TIERS[t];
+            let sz = tier.size;
+            let isActive = (getTier(scaleDemoHP) === tier);
+            let cx = xOff + sz / 2;
+            let cy = SCALE_CH - 40;
+
+            // Cell background
+            pg.push();
+            pg.noStroke();
+            pg.fill(isActive ? color(30, 12, 12) : color(16, 16, 22));
+            pg.rect(xOff - 5, 30, sz + 10, SCALE_CH - 60, 5);
+            if (isActive) {
+                pg.stroke(255, 51, 102, 120);
+                pg.strokeWeight(2);
+                pg.noFill();
+                pg.rect(xOff - 5, 30, sz + 10, SCALE_CH - 60, 5);
+            } else {
+                pg.stroke(40, 20, 20);
+                pg.strokeWeight(1);
+                pg.noFill();
+                pg.rect(xOff - 5, 30, sz + 10, SCALE_CH - 60, 5);
+            }
+            pg.pop();
+
+            // Tier label
+            pg.push();
+            pg.fill(isActive ? color(255, 51, 102) : color(100, 100, 120));
+            pg.noStroke();
+            pg.textFont('Orbitron, monospace');
+            pg.textSize(10);
+            pg.textAlign(CENTER, TOP);
+            pg.text(tier.name + ' (' + sz + 'px)', cx, 36);
+            pg.text('HP ' + (t === 0 ? '1-3' : t === 1 ? '4-8' : t === 2 ? '9-15' : '16+'), cx, 50);
+            pg.pop();
+
+            // Draw building scaled
+            pg.push();
+            let scaleFactor = sz / 192;
+            pg.translate(cx, cy - sz / 2);
+            pg.scale(scaleFactor);
+
+            // Use the main drawBuilding on this graphics context
+            // We need to draw directly since p5 graphics share the same draw functions
+            // Actually, we're using the main p5 instance for drawing
+            pg.pop();
+
+            xOff += sz + 30;
+        }
+
+        // Since p5 graphics buffers can't easily use our draw functions,
+        // we'll use a simpler approach: draw on the main canvas area
+        // Actually, let's use a second p5 instance approach via the main canvas
+    }
+
+    // We'll use a simpler approach: draw the scale demo by re-rendering
+    // all 4 tiers onto a section below using the main p5 draw context
+    // This requires a different approach - let's use an off-screen buffer approach
+
+    // Actually the cleanest way: render scale demo as part of a second canvas
+    let scaleP5;
+
+    function setupScaleDemo() {
+        // Create the scale demo as a separate mini-sketch
+        let container = document.getElementById('scale-canvas-container');
+
+        // We'll just draw 4 side-by-side previews using divs + individual canvases
+        // Simpler: create one wide canvas and draw all 4 buildings
+        renderScaleDemoFinal();
+    }
+
+    function updateScaleDemo() {
+        scaleDemoHP = parseInt(document.getElementById('hp-slider').value);
+        document.getElementById('hp-value').textContent = scaleDemoHP + ' HP';
+        let tier = getTier(scaleDemoHP);
+        document.getElementById('tier-label').textContent = tier.name + ' (' + tier.size + 'x' + tier.size + ')';
+        renderScaleDemoFinal();
+    }
+
+    function renderScaleDemoFinal() {
+        let container = document.getElementById('scale-canvas-container');
+
+        // Remove old content
+        while (container.firstChild) container.removeChild(container.firstChild);
+
+        // Calculate total width needed
+        let totalW = 0;
+        let maxH = 0;
+        for (let t of SIZE_TIERS) {
+            totalW += t.size + 30;
+            if (t.size > maxH) maxH = t.size;
+        }
+        totalW += 30;
+        maxH += 100;
+
+        let pg = createGraphics(totalW, maxH);
+        pg.pixelDensity(1);
+        pg.background(10, 10, 15);
+
+        // We can't use the p5 draw functions directly on a pg buffer with our current code
+        // because fill/stroke/etc reference the main sketch. Instead, we'll draw placeholder
+        // boxes to indicate scale, and the main grid above shows the actual art.
+
+        let xOff = 15;
+        let currentTier = getTier(scaleDemoHP);
+
+        for (let t = 0; t < SIZE_TIERS.length; t++) {
+            let tier = SIZE_TIERS[t];
+            let sz = tier.size;
+            let isActive = (tier === currentTier);
+            let cx = xOff + sz / 2;
+            let baseY = maxH - 30;
+
+            // Background cell
+            pg.push();
+            pg.noStroke();
+            pg.fill(isActive ? 30 : 18, isActive ? 12 : 16, isActive ? 12 : 22);
+            pg.rect(xOff, 0, sz, maxH - 10, 5);
+            pg.stroke(isActive ? pg.color(255, 51, 102, 150) : pg.color(50, 25, 25));
+            pg.strokeWeight(isActive ? 2 : 1);
+            pg.noFill();
+            pg.rect(xOff, 0, sz, maxH - 10, 5);
+            pg.pop();
+
+            // Label
+            pg.push();
+            pg.fill(isActive ? pg.color(255, 51, 102) : pg.color(100, 100, 120));
+            pg.noStroke();
+            pg.textFont('monospace');
+            pg.textSize(11);
+            pg.textAlign(pg.CENTER, pg.TOP);
+            pg.text(tier.name, cx, 8);
+            pg.text(sz + 'x' + sz, cx, 22);
+            pg.text(t === 0 ? 'HP 1-3' : t === 1 ? 'HP 4-8' : t === 2 ? 'HP 9-15' : 'HP 16+', cx, 36);
+            pg.pop();
+
+            // Draw a scaled building silhouette using the isometric shape
+            let scale = sz / 192;
+            pg.push();
+            pg.translate(cx, baseY - sz / 2 - 10);
+            pg.scale(scale);
+
+            // Menacing red glow underneath
+            pg.noStroke();
+            for (let i = 4; i >= 0; i--) {
+                pg.fill(255, 51, 102, (isActive ? 25 : 12) * (1 - i * 0.18));
+                pg.ellipse(0, 25, 60 + i * 8, (60 + i * 8) * 0.45);
+            }
+
+            // Simple boss building silhouette (iso fortress shape)
+            // Dark crimson base
+            pg.fill(74, 26, 26);
+            pg.stroke(0, 0, 0, 60);
+            pg.strokeWeight(0.5);
+            // Left wall
+            pg.beginShape();
+            pg.vertex(-32, 0); pg.vertex(0, 16); pg.vertex(0, 40); pg.vertex(-32, 24);
+            pg.endShape(pg.CLOSE);
+            // Right wall (darker)
+            pg.fill(55, 20, 20);
+            pg.beginShape();
+            pg.vertex(32, 0); pg.vertex(0, 16); pg.vertex(0, 40); pg.vertex(32, 24);
+            pg.endShape(pg.CLOSE);
+            // Top
+            pg.fill(85, 28, 28);
+            pg.beginShape();
+            pg.vertex(0, -14); pg.vertex(32, 0); pg.vertex(0, 16); pg.vertex(-32, 0);
+            pg.endShape(pg.CLOSE);
+            // Tower
+            pg.fill(70, 24, 24);
+            pg.beginShape();
+            pg.vertex(-8, -10); pg.vertex(8, -2); pg.vertex(8, -30); pg.vertex(-8, -38);
+            pg.endShape(pg.CLOSE);
+            pg.fill(55, 18, 18);
+            pg.beginShape();
+            pg.vertex(8, -2); pg.vertex(16, -6); pg.vertex(16, -34); pg.vertex(8, -30);
+            pg.endShape(pg.CLOSE);
+
+            // Red eye glow on tower
+            pg.noStroke();
+            pg.fill(255, 51, 102, 180);
+            pg.ellipse(6, -18, 4, 3);
+            pg.fill(255, 51, 102, 60);
+            pg.ellipse(6, -18, 10, 7);
+
+            pg.pop();
+
+            xOff += sz + 30;
+        }
+
+        // Append to container
+        let c = pg.elt;
+        c.style.display = 'block';
+        container.appendChild(c);
+    }
+
+    // =========================================================================
+    // COLOR HELPERS
+    // =========================================================================
+    function c3(arr) { return color(arr[0], arr[1], arr[2]); }
+
+    // Boss-specific damage color: goes from hostile red toward charred black
+    function dmgColor(base, dmg) {
+        return lerpColor(c3(base), color(30, 18, 14), dmg * 0.4);
+    }
+    function dmgColorArr(base, dmg) {
+        let c = dmgColor(base, dmg);
+        return [red(c), green(c), blue(c)];
+    }
+
+    // Red tint overlay — blends any color toward hostile red
+    function redTint(baseArr, intensity) {
+        return [
+            Math.min(255, Math.round(baseArr[0] + (180 - baseArr[0]) * intensity)),
+            Math.round(baseArr[1] * (1 - intensity * 0.6)),
+            Math.round(baseArr[2] * (1 - intensity * 0.5))
+        ];
+    }
+
+    // =========================================================================
+    // ISO PRIMITIVES
+    // =========================================================================
+    function isoBox(cx, cy, w, h, depth, baseCol, dmg) {
+        let hw = w / 2, hh = h / 2;
+        let top = dmgColor(baseCol, dmg);
+        let topL = lerpColor(top, color(255, 200, 200), 0.08);
+        let left = lerpColor(top, color(0), 0.08);
+        let right = lerpColor(top, color(0), 0.22);
+
+        // Left face
+        fill(left); stroke(0, 0, 0, 40); strokeWeight(0.5);
+        beginShape();
+        vertex(cx - hw, cy); vertex(cx, cy + hh); vertex(cx, cy + hh + depth); vertex(cx - hw, cy + depth);
+        endShape(CLOSE);
+        // Right face
+        fill(right);
+        beginShape();
+        vertex(cx + hw, cy); vertex(cx, cy + hh); vertex(cx, cy + hh + depth); vertex(cx + hw, cy + depth);
+        endShape(CLOSE);
+        // Top face
+        fill(topL);
+        beginShape();
+        vertex(cx, cy - hh); vertex(cx + hw, cy); vertex(cx, cy + hh); vertex(cx - hw, cy);
+        endShape(CLOSE);
+    }
+
+    function isoCylinder(cx, cy, rx, ry, h, baseCol, dmg) {
+        let col = dmgColor(baseCol, dmg);
+        let dark = lerpColor(col, color(0), 0.2);
+        fill(dark); stroke(0, 0, 0, 40); strokeWeight(0.5);
+        beginShape();
+        for (let a = 0; a <= PI; a += 0.15) {
+            vertex(cx + cos(a) * rx, cy + sin(a) * ry);
+        }
+        for (let a = PI; a >= 0; a -= 0.15) {
+            vertex(cx + cos(a) * rx, cy - h + sin(a) * ry);
+        }
+        endShape(CLOSE);
+        fill(lerpColor(col, color(255, 180, 180), 0.1));
+        ellipse(cx, cy - h, rx * 2, ry * 2);
+    }
+
+    function isoRoof(cx, cy, w, h, peakH, baseCol, dmg) {
+        let hw = w / 2, hh = h / 2;
+        let col = dmgColor(baseCol, dmg);
+        let leftR = lerpColor(col, color(255, 200, 200), 0.08);
+        let rightR = lerpColor(col, color(0), 0.12);
+
+        fill(leftR); stroke(0, 0, 0, 50); strokeWeight(0.5);
+        beginShape();
+        vertex(cx, cy - peakH); vertex(cx - hw, cy); vertex(cx, cy + hh);
+        endShape(CLOSE);
+        fill(rightR);
+        beginShape();
+        vertex(cx, cy - peakH); vertex(cx + hw, cy); vertex(cx, cy + hh);
+        endShape(CLOSE);
+    }
+
+    // =========================================================================
+    // DAMAGE EFFECTS
+    // =========================================================================
+    function drawCracks(dmg, w, h) {
+        if (dmg <= 0) return;
+        let n = Math.floor(dmg * 10) + 1;
+        stroke(20, 15, 10, 120 + dmg * 80);
+        strokeWeight(0.8);
+        noFill();
+        for (let i = 0; i < n; i++) {
+            let sx = R.r(-w/2, w/2), sy = R.r(-h/2, h/3);
+            beginShape();
+            vertex(sx, sy);
+            let segs = R.i(2, 4);
+            for (let j = 0; j < segs; j++) {
+                sx += R.r(-10, 10); sy += R.r(2, 12);
+                vertex(sx, sy);
+            }
+            endShape();
+        }
+        stroke(80, 70, 55, 40 * dmg);
+        strokeWeight(0.3);
+        for (let i = 0; i < Math.floor(n/2); i++) {
+            let sx = R.r(-w/2, w/2), sy = R.r(-h/2, h/3);
+            line(sx, sy, sx + R.r(-8, 8), sy + R.r(5, 15));
+        }
+    }
+
+    function drawSmoke(cx, cy, intensity) {
+        if (intensity <= 0) return;
+        noStroke();
+        let count = Math.floor(intensity * 8) + 2;
+        for (let i = 0; i < count; i++) {
+            let sx = cx + R.r(-18, 18);
+            let sy = cy - R.r(5, 45);
+            let sz = R.r(8, 20) * intensity;
+            for (let j = 4; j >= 0; j--) {
+                let a = 25 * intensity * (1 - j * 0.2);
+                fill(140 + R.r(-20, 20), 135 + R.r(-20, 20), 145 + R.r(-15, 15), a);
+                ellipse(sx + R.r(-2, 2), sy - j * 6, sz + j * 5, sz + j * 3);
+            }
+        }
+    }
+
+    function drawFire(cx, cy, intensity) {
+        if (intensity <= 0) return;
+        noStroke();
+        let count = Math.floor(intensity * 7) + 2;
+        for (let i = 0; i < count; i++) {
+            let fx = cx + R.r(-25, 25);
+            let fy = cy + R.r(-8, 8);
+            let fs = R.r(5, 14) * intensity;
+            fill(255, 80 + R.r(0, 40), 0, 180 * intensity);
+            beginShape();
+            vertex(fx, fy + fs);
+            bezierVertex(fx - fs * 0.7, fy, fx - fs * 0.3, fy - fs * 1.2, fx, fy - fs * 1.5);
+            bezierVertex(fx + fs * 0.3, fy - fs * 1.2, fx + fs * 0.7, fy, fx, fy + fs);
+            endShape(CLOSE);
+            fill(255, 220, 80, 200 * intensity);
+            ellipse(fx, fy - fs * 0.2, fs * 0.4, fs * 0.7);
+            fill(255, R.r(60, 120), 20, 150 * intensity);
+            for (let e = 0; e < 3; e++) {
+                ellipse(fx + R.r(-8, 8), fy - R.r(12, 30), R.r(1, 3), R.r(1, 3));
+            }
+        }
+    }
+
+    function drawRubble(w, h, bldg) {
+        noStroke();
+        // Rubble mound shadow
+        fill(15, 12, 10, 100);
+        ellipse(0, 8, w * 1.1, h * 0.6);
+
+        let chunks = 20 + R.i(5, 12);
+        for (let i = 0; i < chunks; i++) {
+            let rx = R.r(-w/2, w/2);
+            let ry = R.r(-h/4, h/3);
+            let rs = R.r(3, 12);
+            // At 0% HP, rubble returns to territory's friendly color
+            let rc = lerpColor(c3(bldg.territoryAccent), color(50, 40, 30), R.r(0.3, 0.7));
+            fill(rc);
+            stroke(0, 0, 0, 30);
+            strokeWeight(0.3);
+            beginShape();
+            let sides = R.i(3, 6);
+            for (let j = 0; j < sides; j++) {
+                let a = (j / sides) * TWO_PI + R.r(-0.4, 0.4);
+                vertex(rx + cos(a) * rs * R.r(0.4, 1), ry + sin(a) * rs * R.r(0.3, 0.7));
+            }
+            endShape(CLOSE);
+        }
+        // Dust
+        noStroke();
+        for (let i = 0; i < 8; i++) {
+            fill(90, 80, 65, 20 + R.r(0, 15));
+            ellipse(R.r(-35, 35), R.r(-8, 12), R.r(15, 45), R.r(8, 20));
+        }
+    }
+
+    function drawFlag(fx, fy, col, waving) {
+        stroke(160, 155, 150);
+        strokeWeight(1.5);
+        line(fx, fy, fx, fy - 30);
+        fill(200, 195, 190);
+        noStroke();
+        ellipse(fx, fy - 31, 3, 3);
+        if (waving) {
+            let fc = color(col);
+            fill(fc);
+            noStroke();
+            beginShape();
+            vertex(fx + 1, fy - 30);
+            vertex(fx + 16, fy - 27);
+            vertex(fx + 14, fy - 21);
+            vertex(fx + 1, fy - 19);
+            endShape(CLOSE);
+            fill(lerpColor(fc, color(0), 0.2));
+            beginShape();
+            vertex(fx + 8, fy - 27);
+            vertex(fx + 16, fy - 27);
+            vertex(fx + 14, fy - 21);
+            vertex(fx + 10, fy - 22);
+            endShape(CLOSE);
+        }
+    }
+
+    // Menacing red glow (replaces cyan glow)
+    function drawGlow(cx, cy, r, col, alpha) {
+        noStroke();
+        for (let i = 4; i >= 0; i--) {
+            let a = alpha * (1 - i * 0.2);
+            let c = color(col);
+            c.setAlpha(a);
+            fill(c);
+            ellipse(cx, cy, r + i * 6, (r + i * 6) * 0.5);
+        }
+    }
+
+    // Red menacing underglow for bosses
+    function drawBossGlow(cx, cy, r, hp) {
+        noStroke();
+        // Intensity scales with HP — full HP = most menacing
+        let intensity = hp;
+        for (let i = 5; i >= 0; i--) {
+            let a = 40 * intensity * (1 - i * 0.16);
+            fill(255, 30, 60, a);
+            ellipse(cx, cy, r + i * 8, (r + i * 8) * 0.45);
+        }
+    }
+
+    // Pulsing red eye effect on boss buildings
+    function drawEvilEyes(x, y, hp) {
+        if (hp < 0.25) return;
+        let intensity = hp;
+        noStroke();
+        // Eye glow
+        fill(255, 51, 102, 150 * intensity);
+        ellipse(x, y, 5, 3.5);
+        // Outer glow
+        fill(255, 51, 102, 40 * intensity);
+        ellipse(x, y, 12, 8);
+    }
+
+    function drawWindow(wx, wy, ww, wh, lit, dmg) {
+        if (dmg > 0.6 && R.n() > 0.5) return;
+        fill(12, 8, 8);
+        stroke(60, 25, 25, 80);
+        strokeWeight(0.5);
+        rect(wx, wy, ww, wh);
+        if (lit && dmg < 0.3) {
+            // Boss windows glow red/orange instead of blue
+            fill(R.r(120, 180), R.r(20, 50), R.r(10, 30), 60);
+            noStroke();
+            rect(wx + 0.5, wy + 0.5, ww - 1, wh - 1);
+        }
+        if (dmg > 0.4) {
+            stroke(30, 25, 20, 100);
+            strokeWeight(0.3);
+            line(wx, wy, wx + ww, wy + wh);
+        }
+    }
+
+    function drawStoneTexture(x, y, w, h, density, dmg) {
+        stroke(0, 0, 0, 15 + dmg * 20);
+        strokeWeight(0.3);
+        for (let i = 0; i < density; i++) {
+            let lx = x + R.r(0, w);
+            let ly = y + R.r(0, h);
+            line(lx, ly, lx + R.r(-4, 4), ly + R.r(-1, 1));
+        }
+    }
+
+    // =========================================================================
+    // BUILDING DISPATCHER
+    // =========================================================================
+    function drawBuilding(type, hp, bldg) {
+        let dmg = 1 - hp;
+
+        // Boss glow color: always danger red (dims with damage)
+        let glowCol = '#ff3366';
+        let glowA = 45 * hp;
+
+        // 0% HP = rubble with VICTORY treatment
+        if (hp === 0) {
+            drawRubble(65, 25, bldg);
+            // Victory: territory's friendly color returns with green flag
+            drawFlag(0, -2, '#33ff77', true);
+            drawGlow(0, 5, 25, '#33ff77', 20);
+            // Subtle territory color glow to show it's been liberated
+            drawGlow(0, 10, 20, bldg.territoryFlag, 15);
+            return;
+        }
+
+        // Draw menacing red underglow (brighter at full HP)
+        drawBossGlow(0, 24, 30, hp);
+
+        switch(type) {
+            case 0: buildHQ(hp, dmg, bldg, glowCol, glowA); break;
+            case 1: buildLeadGen(hp, dmg, bldg, glowCol, glowA); break;
+            case 2: buildSales(hp, dmg, bldg, glowCol, glowA); break;
+            case 3: buildFulfillment(hp, dmg, bldg, glowCol, glowA); break;
+            case 4: buildSupport(hp, dmg, bldg, glowCol, glowA); break;
+            case 5: buildRetention(hp, dmg, bldg, glowCol, glowA); break;
+        }
+
+        // Universal damage overlays
+        if (dmg > 0) drawCracks(dmg, 65, 45);
+        if (dmg >= 0.25) drawSmoke(R.r(-10, 10), -35, dmg * 0.5);
+        if (dmg >= 0.5) drawFire(R.r(-18, 18), R.r(-5, 10), (dmg - 0.35) * 1.3);
+
+        // Red danger glow underneath (fades as damage increases)
+        if (hp > 0.3) drawGlow(0, 22, 28, glowCol, glowA);
+    }
+
+    // =========================================================================
+    // HQ -- Command Fortress (HOSTILE)
+    // =========================================================================
+    function buildHQ(hp, dmg, B, gc, ga) {
+        noStroke(); fill(5, 5, 8, 60);
+        ellipse(0, 28, 90, 35);
+
+        // Base platform (dark crimson stone)
+        isoBox(0, 20, 85, 42, 8, B.dark, dmg);
+
+        let wL = dmgColorArr(B.light, dmg);
+        let wD = dmgColorArr(B.dark, dmg);
+        let wT = dmgColorArr(B.roof, dmg);
+
+        // Left wall
+        fill(c3(wL)); stroke(0,0,0,50); strokeWeight(0.5);
+        beginShape(); vertex(-32, 0); vertex(0, 16); vertex(0, 48); vertex(-32, 32); endShape(CLOSE);
+        drawStoneTexture(-32, 0, 32, 48, 8, dmg);
+        // Right wall
+        fill(c3(wD));
+        beginShape(); vertex(32, 0); vertex(0, 16); vertex(0, 48); vertex(32, 32); endShape(CLOSE);
+        drawStoneTexture(0, 0, 32, 48, 8, dmg);
+        // Top
+        fill(c3(wT));
+        beginShape(); vertex(0, -16); vertex(32, 0); vertex(0, 16); vertex(-32, 0); endShape(CLOSE);
+
+        // Battlements
+        for (let i = -3; i <= 3; i++) {
+            if (dmg > 0.5 && R.n() > 0.6) continue;
+            let bx = i * 8, by = -16 + Math.abs(i) * 2.5;
+            fill(c3(wT)); stroke(0,0,0,40); strokeWeight(0.4);
+            rect(bx - 3, by - 7, 6, 5);
+        }
+
+        // Central watchtower
+        if (dmg < 0.8) {
+            let tc = dmgColorArr(redTint([80, 78, 88], 0.3), dmg);
+            let tc2 = dmgColorArr(redTint([62, 60, 70], 0.3), dmg);
+            fill(c3(tc)); stroke(0,0,0,50); strokeWeight(0.5);
+            beginShape(); vertex(-8, -12); vertex(8, -4); vertex(8, -32); vertex(-8, -40); endShape(CLOSE);
+            fill(c3(tc2));
+            beginShape(); vertex(8, -4); vertex(16, -8); vertex(16, -36); vertex(8, -32); endShape(CLOSE);
+            fill(lerpColor(c3(tc), color(255, 200, 200), 0.08));
+            beginShape(); vertex(-8, -40); vertex(8, -32); vertex(16, -36); vertex(-2, -44); endShape(CLOSE);
+            for (let i = 0; i < 3; i++) {
+                fill(c3(tc)); stroke(0,0,0,30);
+                rect(-6 + i * 7, -48 + i * 2, 4, 4);
+            }
+            // Evil eye instead of arrow slit
+            drawEvilEyes(6, -22, hp);
+            // Red flag (danger)
+            if (hp >= 0.5) drawFlag(4, -42, gc, hp >= 0.75);
+        }
+
+        // Gate
+        fill(22, 12, 14); stroke(80, 30, 35, 80); strokeWeight(0.8);
+        arc(0, 30, 18, 22, PI, TWO_PI);
+        noStroke(); fill(22, 12, 14);
+        rect(-9, 30, 18, 14);
+        // Portcullis bars (red tinted iron)
+        stroke(100, 40, 45, 100); strokeWeight(0.5);
+        for (let i = -1; i <= 1; i++) line(i * 5, 26, i * 5, 44);
+
+        // Windows glow menacing red
+        drawWindow(-20, 14, 5, 7, true, dmg);
+        drawWindow(-12, 20, 5, 7, true, dmg);
+        drawWindow(12, 14, 5, 7, true, dmg);
+        drawWindow(20, 20, 5, 7, true, dmg);
+    }
+
+    // =========================================================================
+    // LEAD-GEN -- Signpost Outpost (HOSTILE)
+    // =========================================================================
+    function buildLeadGen(hp, dmg, B, gc, ga) {
+        noStroke(); fill(5, 5, 8, 50);
+        ellipse(0, 28, 85, 35);
+
+        // Scorched ground (not friendly green)
+        fill(dmgColor([42, 28, 22], dmg));
+        noStroke();
+        beginShape(); vertex(0, 32); vertex(42, 14); vertex(0, -4); vertex(-42, 14); endShape(CLOSE);
+
+        // Dead/corrupted plants
+        if (dmg < 0.6) {
+            noStroke();
+            for (let i = 0; i < 16; i++) {
+                let px = R.r(-32, 32), py = R.r(8, 28);
+                let g = lerpColor(color(60, 30, 25), color(40, 25, 18), dmg);
+                fill(g); ellipse(px, py, 2 + R.r(0, 2), 3 + R.r(0, 3));
+            }
+        }
+
+        // Main outpost building (crimson)
+        isoBox(0, 8, 48, 24, 30, B.light, dmg);
+
+        // Dark roof
+        let roofBase = dmgColorArr(B.roof, dmg);
+        fill(c3(roofBase)); stroke(0,0,0,40); strokeWeight(0.5);
+        beginShape(); vertex(0, -18); vertex(-28, 0); vertex(0, 14); endShape(CLOSE);
+        fill(lerpColor(c3(roofBase), color(0), 0.15));
+        beginShape(); vertex(0, -18); vertex(28, 0); vertex(0, 14); endShape(CLOSE);
+        stroke(lerpColor(c3(roofBase), color(0), 0.2)); strokeWeight(0.3);
+        for (let i = 0; i < 5; i++) {
+            let ly = -14 + i * 5;
+            line(-20 + i * 4, ly + 4, 0, ly);
+            line(20 - i * 4, ly + 4, 0, ly);
+        }
+
+        // Door
+        fill(35, 18, 14); stroke(55, 25, 20, 80); strokeWeight(0.5);
+        rect(-4, 22, 8, 12, 1);
+        fill(120, 50, 40); noStroke();
+        ellipse(2, 28, 2, 2);
+
+        // Corrupted signpost
+        if (dmg < 0.6) {
+            stroke(80, 35, 30); strokeWeight(2);
+            let spx = 32;
+            line(spx, 25, spx, -12);
+            noStroke();
+            fill(60, 25, 20);
+            beginShape();
+            vertex(spx, -10); vertex(spx + 20, -12); vertex(spx + 18, -6); vertex(spx, -4);
+            endShape(CLOSE);
+            fill(50, 22, 18);
+            beginShape();
+            vertex(spx, -1); vertex(spx - 16, -3); vertex(spx - 14, 3); vertex(spx, 5);
+            endShape(CLOSE);
+            // Skull/danger marking on signs
+            stroke(255, 51, 102, 80); strokeWeight(0.5);
+            line(spx + 4, -9, spx + 14, -10);
+            line(spx - 12, 0, spx - 4, 1);
+        } else if (dmg < 0.8) {
+            push(); translate(32, 25); rotate(-0.25);
+            stroke(80, 35, 30, 140); strokeWeight(1.5);
+            line(0, 0, 0, -30);
+            pop();
+        }
+
+        // Corrupted beacon tower (left)
+        if (dmg < 0.6) {
+            isoCylinder(-30, 18, 6, 4, 35, B.light, dmg);
+            // Red beacon
+            if (hp >= 0.75) drawGlow(-30, -20, 8, '#ff3366', 70);
+        }
+
+        // Spiked fence posts
+        if (dmg < 0.4) {
+            stroke(80, 35, 30, 120); strokeWeight(1);
+            for (let i = 0; i < 4; i++) {
+                let fx = -35 + i * 10, fy = 28 - i * 2;
+                line(fx, fy, fx, fy - 8);
+                // Spike tips
+                line(fx - 1, fy - 8, fx, fy - 11);
+                line(fx + 1, fy - 8, fx, fy - 11);
+            }
+            strokeWeight(0.5);
+            line(-35, 22, -5, 18);
+        }
+
+        if (hp >= 0.5) drawFlag(-30, -22, gc, hp >= 0.75);
+    }
+
+    // =========================================================================
+    // SALES -- Market Building (HOSTILE)
+    // =========================================================================
+    function buildSales(hp, dmg, B, gc, ga) {
+        noStroke(); fill(5, 5, 8, 50);
+        ellipse(0, 28, 90, 38);
+
+        // Bloodstained cobblestone
+        fill(dmgColor([45, 25, 22], dmg)); noStroke();
+        beginShape(); vertex(0, 35); vertex(45, 15); vertex(0, -5); vertex(-45, 15); endShape(CLOSE);
+        stroke(35, 18, 15, 30); strokeWeight(0.3);
+        for (let i = 0; i < 12; i++) {
+            let sx = R.r(-30, 30), sy = R.r(10, 30);
+            ellipse(sx, sy, R.r(4, 8), R.r(3, 5));
+        }
+
+        // Main hall (crimson)
+        isoBox(0, 5, 55, 28, 38, B.light, dmg);
+
+        // Dark roof
+        let rr = dmgColorArr(B.roof, dmg);
+        fill(c3(rr)); stroke(0,0,0,40); strokeWeight(0.5);
+        beginShape(); vertex(0, -20); vertex(-32, -2); vertex(0, 14); endShape(CLOSE);
+        fill(lerpColor(c3(rr), color(0), 0.15));
+        beginShape(); vertex(0, -20); vertex(32, -2); vertex(0, 14); endShape(CLOSE);
+
+        // Dark iron ridge (no gold for enemies)
+        let ironCol = lerpColor(color(100, 40, 35), color(50, 20, 15), dmg * 0.5);
+        stroke(ironCol); strokeWeight(1.2); noFill();
+        line(0, -20, 0, 14);
+        strokeWeight(0.8);
+        line(-32, -2, 0, 14); line(32, -2, 0, 14);
+
+        // Enemy market stalls
+        if (dmg < 0.5) {
+            isoBox(-36, 15, 20, 10, 15, [65, 28, 22], dmg);
+            fill(lerpColor(color(120, 35, 25), color(60, 20, 14), dmg));
+            noStroke();
+            beginShape(); vertex(-44, 8); vertex(-28, 3); vertex(-28, 7); vertex(-44, 12); endShape(CLOSE);
+            // Skull/contraband on stall
+            fill(lerpColor(color(140, 60, 40), color(70, 30, 20), dmg));
+            for (let i = 0; i < 3; i++) {
+                ellipse(-38 + i * 4, 18 + i, 3, 2.5);
+            }
+
+            isoBox(36, 15, 20, 10, 15, [65, 28, 22], dmg);
+            fill(lerpColor(color(100, 35, 40), color(50, 18, 20), dmg));
+            noStroke();
+            beginShape(); vertex(44, 8); vertex(28, 3); vertex(28, 7); vertex(44, 12); endShape(CLOSE);
+            fill(lerpColor(color(120, 50, 55), color(60, 25, 28), dmg));
+            for (let i = 0; i < 3; i++) {
+                rect(32 + i * 4, 17 + i, 3, 4, 0.5);
+            }
+        }
+
+        // Arched door with iron frame
+        fill(22, 12, 10); stroke(ironCol); strokeWeight(0.8);
+        arc(0, 26, 14, 18, PI, TWO_PI);
+        noStroke(); fill(22, 12, 10);
+        rect(-7, 26, 14, 12);
+
+        drawWindow(-16, 16, 5, 7, true, dmg);
+        drawWindow(14, 14, 5, 7, true, dmg);
+
+        // Red embers instead of gold coins
+        if (hp >= 0.75) {
+            fill(255, 51, 102, 80); noStroke();
+            for (let i = 0; i < 5; i++) {
+                ellipse(R.r(-8, 8), R.r(28, 35), 3.5, 2.5);
+            }
+        }
+
+        if (hp >= 0.5) drawFlag(0, -22, gc, hp >= 0.75);
+    }
+
+    // =========================================================================
+    // FULFILLMENT -- Workshop/Factory (HOSTILE)
+    // =========================================================================
+    function buildFulfillment(hp, dmg, B, gc, ga) {
+        noStroke(); fill(5, 5, 8, 50);
+        ellipse(0, 30, 90, 38);
+
+        // Scorched industrial ground
+        fill(dmgColor([35, 20, 25], dmg)); noStroke();
+        beginShape(); vertex(0, 35); vertex(45, 15); vertex(0, -5); vertex(-45, 15); endShape(CLOSE);
+
+        // Main factory body (crimson)
+        isoBox(0, 8, 70, 35, 35, B.light, dmg);
+
+        // Dark roof
+        let rr = dmgColorArr(B.roof, dmg);
+        fill(c3(rr)); stroke(0,0,0,40); strokeWeight(0.5);
+        beginShape(); vertex(0, -10); vertex(35, 8); vertex(0, 20); vertex(-35, 8); endShape(CLOSE);
+
+        // Smokestacks belching dark red smoke
+        for (let s = 0; s < 2; s++) {
+            let sx = -14 + s * 24, sy = -8 + s * 4;
+            if (dmg > 0.75 && R.n() > 0.4) continue;
+            isoCylinder(sx, sy + 5, 5, 3, 30, redTint([70, 55, 85], 0.3), dmg);
+            fill(dmgColor(redTint([85, 70, 100], 0.3), dmg));
+            noStroke();
+            ellipse(sx, sy - 25, 12, 7);
+            // Dark/red-tinged smoke
+            if (hp >= 0.4) {
+                noStroke();
+                for (let p = 0; p < 4; p++) {
+                    fill(100 + R.r(-15, 15), 50 + R.r(-10, 10), 45 + R.r(-10, 10), 35 * (1 - dmg * 0.6));
+                    ellipse(sx + R.r(-5, 5), sy - 30 - p * 7, 10 + p * 4, 7 + p * 2);
+                }
+            }
+        }
+
+        // Conveyor belt
+        if (dmg < 0.6) {
+            stroke(lerpColor(color(80, 35, 40), color(40, 20, 22), dmg));
+            strokeWeight(2); noFill();
+            beginShape();
+            vertex(-40, 30); vertex(-22, 36); vertex(22, 22); vertex(40, 26);
+            endShape();
+            stroke(100, 45, 50, 100); strokeWeight(0.5);
+            for (let i = 0; i < 8; i++) {
+                let t = i / 7;
+                let bx = lerp(-40, 40, t);
+                let by = lerp(30, 26, t) + sin(t * PI) * 4;
+                line(bx - 2, by - 1, bx + 2, by + 1);
+            }
+            // Dark packages
+            fill(lerpColor(color(90, 40, 45), color(50, 22, 25), dmg));
+            noStroke();
+            for (let i = 0; i < 3; i++) {
+                let t = (i + 0.5) / 3;
+                let px = lerp(-30, 30, t);
+                let py = lerp(32, 24, t) + sin(t * PI) * 3;
+                rect(px - 4, py - 5, 8, 6, 1);
+            }
+        }
+
+        // Windows
+        for (let i = 0; i < 3; i++) {
+            drawWindow(-22 + i * 10, 18 + i * 2, 6, 8, true, dmg);
+        }
+
+        // Evil gear emblem
+        if (hp >= 0.6) {
+            push(); translate(22, 18);
+            stroke(180, 50, 50, 100); strokeWeight(1); noFill();
+            ellipse(0, 0, 12, 12);
+            for (let a = 0; a < 6; a++) {
+                let ang = a * PI / 3;
+                line(cos(ang) * 4, sin(ang) * 4, cos(ang) * 8, sin(ang) * 8);
+            }
+            // Red center eye
+            drawEvilEyes(0, 0, hp);
+            pop();
+        }
+
+        // Loading dock
+        fill(18, 10, 12); stroke(50, 25, 30, 80); strokeWeight(0.5);
+        rect(-6, 26, 12, 14, 1);
+        stroke(40, 22, 25, 60); strokeWeight(0.3);
+        for (let i = 0; i < 4; i++) line(-5, 28 + i * 3, 5, 28 + i * 3);
+
+        if (hp >= 0.5) drawFlag(10, -8, gc, hp >= 0.75);
+    }
+
+    // =========================================================================
+    // SUPPORT -- Medical Outpost (HOSTILE)
+    // =========================================================================
+    function buildSupport(hp, dmg, B, gc, ga) {
+        noStroke(); fill(5, 5, 8, 50);
+        ellipse(0, 28, 85, 35);
+
+        // Scorched ground
+        fill(dmgColor([42, 25, 22], dmg)); noStroke();
+        beginShape(); vertex(0, 32); vertex(42, 14); vertex(0, -4); vertex(-42, 14); endShape(CLOSE);
+
+        // Walls (crimson)
+        isoBox(0, 10, 50, 25, 25, B.light, dmg);
+
+        // Dark tent roof
+        let canv = dmgColorArr(B.roof, dmg);
+        fill(c3(canv)); stroke(0,0,0,40); strokeWeight(0.5);
+        beginShape(); vertex(0, -22); vertex(-30, 2); vertex(0, 16); endShape(CLOSE);
+        fill(lerpColor(c3(canv), color(0), 0.12));
+        beginShape(); vertex(0, -22); vertex(30, 2); vertex(0, 16); endShape(CLOSE);
+        stroke(lerpColor(c3(canv), color(0), 0.15)); strokeWeight(0.3);
+        for (let i = 0; i < 4; i++) {
+            let t = (i + 1) / 5;
+            line(lerp(-30, 0, t), lerp(2, -22, t) + 2, 0, lerp(16, -22, t));
+        }
+
+        // Skull and crossbones instead of red cross (enemy outpost)
+        if (dmg < 0.6) {
+            // X mark (menacing)
+            stroke(255, 51, 102, 200); strokeWeight(2);
+            line(-5, -5, 5, 5);
+            line(5, -5, -5, 5);
+            // Circle around it
+            noFill();
+            stroke(255, 51, 102, 120); strokeWeight(1);
+            ellipse(0, 0, 16, 16);
+        }
+
+        // Supply crates (enemy supplies)
+        if (dmg < 0.6) {
+            let crateC = redTint([100, 80, 50], 0.3);
+            isoBox(32, 22, 14, 7, 10, crateC, dmg);
+            isoBox(35, 16, 12, 6, 8, redTint([90, 72, 45], 0.3), dmg);
+            // Danger marking on crate
+            stroke(255, 51, 102, 100); strokeWeight(0.6);
+            line(29, 24, 35, 28); line(35, 24, 29, 28);
+        }
+
+        // Radio tower / jammer
+        if (dmg < 0.7) {
+            stroke(100, 40, 35, 160); strokeWeight(1.2);
+            line(-32, 22, -32, -14);
+            strokeWeight(0.8);
+            line(-35, -4, -29, -7);
+            line(-35, -9, -29, -12);
+            stroke(80, 35, 30, 60); strokeWeight(0.3);
+            line(-32, -14, -40, 20);
+            line(-32, -14, -24, 20);
+            // Red signal rings (jamming)
+            if (hp >= 0.75) {
+                noFill();
+                stroke(255, 51, 102, 50); strokeWeight(0.5);
+                arc(-32, -16, 14, 10, PI + 0.4, TWO_PI - 0.4);
+                arc(-32, -16, 22, 16, PI + 0.4, TWO_PI - 0.4);
+                arc(-32, -16, 30, 22, PI + 0.3, TWO_PI - 0.3);
+            }
+        }
+
+        // Door
+        fill(lerpColor(c3(canv), color(0), 0.2)); noStroke();
+        beginShape();
+        vertex(-4, 18); vertex(4, 18); vertex(6, 32); vertex(-6, 32);
+        endShape(CLOSE);
+
+        if (hp >= 0.5) drawFlag(0, -24, gc, hp >= 0.75);
+    }
+
+    // =========================================================================
+    // RETENTION -- Fortified Keep (HOSTILE)
+    // =========================================================================
+    function buildRetention(hp, dmg, B, gc, ga) {
+        noStroke(); fill(5, 5, 8, 50);
+        ellipse(0, 30, 95, 42);
+
+        // Blood moat (dark red water)
+        if (dmg < 0.5) {
+            fill(30, 10, 14, 140); noStroke();
+            beginShape(); vertex(0, 38); vertex(48, 16); vertex(0, -6); vertex(-48, 16); endShape(CLOSE);
+            // Red shimmer
+            fill(50, 15, 20, 35);
+            for (let i = 0; i < 8; i++) {
+                ellipse(R.r(-38, 38), R.r(18, 34), R.r(4, 12), R.r(1, 3));
+            }
+            // Inner ground
+            fill(dmgColor([35, 18, 22], dmg));
+            beginShape(); vertex(0, 33); vertex(40, 14); vertex(0, -2); vertex(-40, 14); endShape(CLOSE);
+        } else {
+            fill(dmgColor([35, 18, 22], dmg)); noStroke();
+            beginShape(); vertex(0, 35); vertex(45, 15); vertex(0, -5); vertex(-45, 15); endShape(CLOSE);
+        }
+
+        // Thick outer curtain walls (crimson)
+        isoBox(0, 8, 75, 38, 35, B.dark, dmg);
+
+        // Wall battlements
+        for (let i = -4; i <= 4; i++) {
+            if (dmg > 0.5 && R.n() > 0.5) continue;
+            let bx = i * 7, by = -11 + Math.abs(i) * 2.2;
+            fill(dmgColor(B.roof, dmg)); stroke(0,0,0,30); strokeWeight(0.3);
+            rect(bx - 2.5, by - 6, 5, 4);
+        }
+
+        // Corner towers (dark crimson)
+        let towers = [[-32, 12], [32, 12], [-18, -2], [18, -2]];
+        for (let t = 0; t < 4; t++) {
+            if (dmg > 0.6 && R.n() > 0.5) continue;
+            let tx = towers[t][0], ty = towers[t][1];
+            isoCylinder(tx, ty + 5, 7, 5, 25, B.light, dmg);
+            // Tower cap (cone)
+            fill(dmgColor(B.roof, dmg)); stroke(0,0,0,30); strokeWeight(0.3);
+            beginShape();
+            vertex(tx, ty - 28);
+            for (let a = 0; a <= TWO_PI; a += 0.3) {
+                vertex(tx + cos(a) * 7, ty - 20 + sin(a) * 4);
+            }
+            endShape(CLOSE);
+            fill(dmgColor(B.light, dmg));
+            for (let b = -1; b <= 1; b++) {
+                rect(tx + b * 4 - 1.5, ty - 22, 3, 3);
+            }
+        }
+
+        // Inner keep (tall, crimson)
+        let kL = dmgColorArr(redTint([55, 55, 90], 0.35), dmg);
+        let kD = dmgColorArr(redTint([40, 40, 72], 0.35), dmg);
+        let kT = dmgColorArr(redTint([65, 65, 100], 0.35), dmg);
+
+        fill(c3(kL)); stroke(0,0,0,50); strokeWeight(0.5);
+        beginShape(); vertex(-16, -5); vertex(0, 3); vertex(0, 30); vertex(-16, 22); endShape(CLOSE);
+        fill(c3(kD));
+        beginShape(); vertex(16, -5); vertex(0, 3); vertex(0, 30); vertex(16, 22); endShape(CLOSE);
+        fill(c3(kT));
+        beginShape(); vertex(0, -15); vertex(16, -5); vertex(0, 3); vertex(-16, -5); endShape(CLOSE);
+
+        // Keep battlements
+        for (let i = -1; i <= 1; i++) {
+            fill(c3(kT)); stroke(0,0,0,25); strokeWeight(0.3);
+            rect(i * 6 - 2, -19, 4, 3);
+        }
+
+        // Portcullis gate
+        fill(15, 8, 10); stroke(50, 22, 28, 80); strokeWeight(0.5);
+        rect(-5, 20, 10, 14, 1);
+        stroke(70, 30, 35, 100); strokeWeight(0.4);
+        for (let i = -1; i <= 1; i++) line(i * 3, 20, i * 3, 34);
+        line(-5, 26, 5, 26);
+
+        // Evil eyes on keep
+        drawEvilEyes(-10, 10, hp);
+        drawEvilEyes(8, 8, hp);
+
+        // Flag
+        if (hp >= 0.5) drawFlag(0, -22, gc, hp >= 0.75);
+
+        // Moat bridge (dark wood)
+        if (dmg < 0.5) {
+            fill(dmgColor([50, 25, 20], dmg));
+            stroke(0,0,0,30); strokeWeight(0.5);
+            beginShape();
+            vertex(-6, 32); vertex(6, 32); vertex(8, 38); vertex(-8, 38);
+            endShape(CLOSE);
+        }
+    }
+
+    // =========================================================================
+    // SEED + DOWNLOAD
+    // =========================================================================
+    function updateSeed() {
+        let v = parseInt(document.getElementById('seed-input').value);
+        if (v && v > 0) { currentSeed = v; renderAll(); renderScaleDemoFinal(); }
+    }
+    function prevSeed() {
+        currentSeed = Math.max(1, currentSeed - 1);
+        document.getElementById('seed-input').value = currentSeed;
+        renderAll(); renderScaleDemoFinal();
+    }
+    function nextSeed() {
+        currentSeed++;
+        document.getElementById('seed-input').value = currentSeed;
+        renderAll(); renderScaleDemoFinal();
+    }
+    function randomSeed2() {
+        currentSeed = Math.floor(Math.random() * 999999) + 1;
+        document.getElementById('seed-input').value = currentSeed;
+        renderAll(); renderScaleDemoFinal();
+    }
+    function downloadSpriteSheet() {
+        saveCanvas('boss-buildings-spritesheet', 'png');
+    }
+    </script>
+</body>
+</html>
