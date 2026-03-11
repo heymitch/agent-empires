@@ -303,6 +303,11 @@ export class BattlefieldRenderer {
     return this.units.get(id)
   }
 
+  /** Expose the effects layer for path line rendering */
+  getEffectsLayer(): Container {
+    return this.effectsLayer
+  }
+
   getAllUnits(): Map<string, UnitRenderer> {
     return this.units
   }
