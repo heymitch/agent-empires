@@ -395,6 +395,9 @@ async function init() {
   economyPanel = new EconomyPanel()
   timelinePanel = new TimelinePanel()
 
+  // 4c2. Fleet Dashboard (toggle with F)
+  fleetDashboard = new FleetDashboard()
+
   // 4d. Keyboard Overlay (toggle with ?)
   keyboardOverlay = new KeyboardOverlay()
 
@@ -657,8 +660,15 @@ async function init() {
         const recentTools = recentToolsMap.get(unitId) || []
         const combo = comboTracker.getCombo(unitId)
         unitInspectionPanel.show(unitId, unit, session, recentTools, combo)
+
+        // Show timeline with session history
+        const unitName = session ? getSessionName(session) : unitId.slice(0, 8)
+        timelinePanel.show(unitId, unitName)
+        const history = sessionHistory.get(unitId)
+        if (history) timelinePanel.setEvents([...history])
       } else {
         unitInspectionPanel.hide()
+        timelinePanel.hide()
       }
     }
   }
@@ -758,6 +768,14 @@ function setupEventClient() {
     const overlay = document.getElementById('not-connected-overlay')
     if (connected) {
       overlay?.classList.remove('visible')
+      // Register as a fleet peer and discover existing peers
+      const machineId = localStorage.getItem('fleet-machine-id') || crypto.randomUUID()
+      localStorage.setItem('fleet-machine-id', machineId)
+      const ws = eventClient.socket
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'fleet_register', machineId, capabilities: ['dashboard'] }))
+        ws.send(JSON.stringify({ type: 'fleet_discover', machineId, timestamp: Date.now() }))
+      }
     } else {
       // Show overlay after initial failed connection
       setTimeout(() => {
@@ -845,6 +863,27 @@ function setupEventClient() {
       // If this territory's production view is currently showing, update it live
       if (productionChainRenderer.getActiveTerritory() === data.territory) {
         productionChainRenderer.updateData(data)
+      }
+    } else if ((msg as any).type === 'fleet_peer_joined') {
+      // Fleet peer joined — add to dashboard
+      const data = msg as unknown as FleetPeerJoinedMessage
+      fleetDashboard.addPeer({
+        machineId: data.machineId,
+        capabilities: data.capabilities || [],
+        connectedAt: data.timestamp,
+      })
+      console.log(`[Fleet] Peer joined: ${data.machineId}`)
+    } else if ((msg as any).type === 'fleet_peer_left') {
+      // Fleet peer left — remove from dashboard
+      const data = msg as unknown as FleetPeerLeftMessage
+      fleetDashboard.removePeer(data.machineId)
+      console.log(`[Fleet] Peer left: ${data.machineId}`)
+    } else if ((msg as any).type === 'fleet_discover' && (msg as any).peers) {
+      // Fleet discover response — full peer list
+      const data = msg as unknown as FleetDiscoverMessage
+      if (data.peers) {
+        fleetDashboard.updatePeers(data.peers)
+        console.log(`[Fleet] Discovered ${data.peers.length} peers`)
       }
     } else if ((msg as any).type === 'fleet_restore') {
       // PRD 12 — Restore battlefield state from persistence
@@ -1233,6 +1272,11 @@ function handleEvent(event: ClaudeEvent, isHistory = false) {
           }
           list.push(toolRecord)
           if (list.length > 5) list.shift()
+
+          // Timeline: tool use + territory movement
+          pushSessionEvent(session.id, { type: 'tool', name: e.tool, timestamp: event.timestamp })
+          const targetTerritory = toolToTerritory(e.tool)
+          pushSessionEvent(session.id, { type: 'territory', name: targetTerritory, timestamp: event.timestamp, territory: targetTerritory })
         }
         break
       }
@@ -1271,11 +1315,19 @@ function handleEvent(event: ClaudeEvent, isHistory = false) {
         if (floatingPanel.isVisible() && session && floatingPanel.getUnitId() === session.id) {
           floatingPanel.addActivity(stopItem)
         }
+        // Timeline: status -> idle
+        if (session) {
+          pushSessionEvent(session.id, { type: 'status', name: 'idle', timestamp: event.timestamp })
+        }
         break
       }
       case 'session_start': {
         commandBar.setTicker(`Unit online: ${sessionName}`)
         intelPanel.addSignal(`New session online: ${sessionName}`, 'info')
+        // Timeline: status -> working
+        if (session) {
+          pushSessionEvent(session.id, { type: 'status', name: 'working', timestamp: event.timestamp })
+        }
         break
       }
     }
@@ -1358,6 +1410,7 @@ function selectUnit(unitId: string | null) {
     gameState.deselectAll()
     floatingPanel.hide()
     unitInspectionPanel.hide()
+    timelinePanel.hide()
     abilityBar.hide()
     commandBar.selectSession('')
   }
@@ -1485,6 +1538,12 @@ function setupKeyboard() {
       economyPanel.toggle()
     }
 
+    // F: toggle Fleet Dashboard (only when ability bar didn't consume it)
+    if (key === 'F' && !e.shiftKey && !abilityBar.isVisible()) {
+      e.preventDefault()
+      fleetDashboard.toggle()
+    }
+
     // ?: toggle Keyboard Overlay
     if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
       e.preventDefault()
@@ -1499,6 +1558,10 @@ function setupKeyboard() {
       }
       if (economyPanel.isVisible()) {
         economyPanel.hide()
+        e.preventDefault()
+      }
+      if (fleetDashboard.isVisible()) {
+        fleetDashboard.hide()
         e.preventDefault()
       }
     }
