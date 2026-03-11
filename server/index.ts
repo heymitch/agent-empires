@@ -51,6 +51,7 @@ import { MonitorOrchestrator } from './monitors/orchestrator.js'
 import { WasteDetector } from './WasteDetector.js'
 import { FleetSignaling } from './FleetSignaling.js'
 import { FleetPersistence } from './FleetPersistence.js'
+import { PaperclipManager } from './PaperclipManager.js'
 
 // Supabase persistence (initialized in startServer if env vars present)
 let persistence: SupabasePersistence | null = null
@@ -75,6 +76,9 @@ let fleetSignaling: FleetSignaling | null = null
 
 // Fleet persistence (PRD 12 — battlefield state survives restarts)
 let fleetPersistence: FleetPersistence | null = null
+
+// Paperclip manager (PRD 13 — tickets, budgets, goals, audit log)
+let paperclipManager: PaperclipManager | null = null
 
 // Road aggregator (hoisted for fleet persistence access)
 let roadAggregator: RoadAggregator | null = null
@@ -3261,6 +3265,10 @@ function main() {
     })
     objectiveManager.startPolling()
     log('[ObjectiveManager] Initialized and polling')
+
+    // Initialize PaperclipManager (PRD 13 — supply chain integration)
+    paperclipManager = new PaperclipManager({ supabaseUrl, supabaseKey })
+    log('[PaperclipManager] Initialized')
 
     // Initialize ProductionDataManager (Factorio Mode)
     productionManager = new ProductionDataManager({ supabaseUrl, supabaseKey })
