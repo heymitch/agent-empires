@@ -59,6 +59,8 @@ import { ObjectiveRenderer, type ObjectiveData } from './renderer/ObjectiveRende
 import { ProductionChainRenderer, type ProductionChainData } from './renderer/ProductionChainRenderer'
 import { AbilityBar } from './hud/AbilityBar'
 import { EconomyPanel } from './hud/EconomyPanel'
+import { toastManager } from './hud/ToastManager'
+import { KeyboardOverlay } from './hud/KeyboardOverlay'
 import { CooldownManager } from './game/CooldownManager'
 import { HOTKEY_ORDER } from './game/SkillRegistry'
 
@@ -125,6 +127,7 @@ let abilityBar: AbilityBar
 let cooldownManager: CooldownManager
 let productionChainRenderer: ProductionChainRenderer
 let economyPanel: EconomyPanel
+let keyboardOverlay: KeyboardOverlay
 
 // Production chain data cache — updated via WebSocket, keyed by territory
 const productionChainCache: Map<string, ProductionChainData> = new Map()
@@ -343,6 +346,9 @@ async function init() {
 
   // 4c. Economy Panel (toggle with Shift+E)
   economyPanel = new EconomyPanel()
+
+  // 4d. Keyboard Overlay (toggle with ?)
+  keyboardOverlay = new KeyboardOverlay()
 
   // 5. Setup battlefield handler dependencies
   battlefieldDeps = {
@@ -932,6 +938,7 @@ function ensureUnit(session: ManagedSession) {
     // Particle burst for new unit
     battlefield.particleSystem.burst(unit.worldX, unit.worldY, 0x00ffcc, 15)
     soundManager.play('deploy_napoleon')
+    toastManager.info(`Unit deployed: ${name}`, '\u{1F680}')
 
     // Set unit class from session data
     const unitClass = (session as any).unitClass as UnitClass | undefined
@@ -1389,6 +1396,24 @@ function setupKeyboard() {
     if (key === 'E' && e.shiftKey) {
       e.preventDefault()
       economyPanel.toggle()
+    }
+
+    // ?: toggle Keyboard Overlay
+    if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+      e.preventDefault()
+      keyboardOverlay.toggle()
+    }
+
+    // Escape: close all overlays/panels
+    if (e.key === 'Escape') {
+      if (keyboardOverlay.isVisible()) {
+        keyboardOverlay.hide()
+        e.preventDefault()
+      }
+      if (economyPanel.isVisible()) {
+        economyPanel.hide()
+        e.preventDefault()
+      }
     }
   })
 }
