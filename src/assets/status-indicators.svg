@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="32" viewBox="0 0 128 32">
+  <!-- Status Pennant Sprite Sheet: 4 pennants, each 32x32 -->
+
+  <!-- Idle Pennant (green) -->
+  <g id="status-idle">
+    <rect x="6" y="4" width="2" height="26" rx="1" style="fill:#5A5040;" />
+    <polygon points="8,4 26,8 26,10 8,14" style="fill:#82C896;" />
+    <polygon points="8,14 26,10 26,12 8,18" style="fill:#82C896; opacity:0.7;" />
+    <circle cx="6" cy="4" r="1.5" style="fill:#C9A84C;" />
+  </g>
+
+  <!-- Working Pennant (orange) -->
+  <g id="status-working" transform="translate(32,0)">
+    <rect x="6" y="4" width="2" height="26" rx="1" style="fill:#5A5040;" />
+    <polygon points="8,4 26,8 26,10 8,14" style="fill:#E8682A;" />
+    <polygon points="8,14 26,10 26,12 8,18" style="fill:#E8682A; opacity:0.7;" />
+    <circle cx="6" cy="4" r="1.5" style="fill:#C9A84C;" />
+    <!-- Motion lines -->
+    <line x1="22" y1="14" x2="26" y2="14" style="stroke:#E8682A; stroke-width:0.75; opacity:0.5;" />
+    <line x1="23" y1="16" x2="27" y2="16" style="stroke:#E8682A; stroke-width:0.75; opacity:0.4;" />
+  </g>
+
+  <!-- Thinking Pennant (teal) -->
+  <g id="status-thinking" transform="translate(64,0)">
+    <rect x="6" y="4" width="2" height="26" rx="1" style="fill:#5A5040;" />
+    <polygon points="8,4 26,8 26,10 8,14" style="fill:#4A9DB8;" />
+    <polygon points="8,14 26,10 26,12 8,18" style="fill:#4A9DB8; opacity:0.7;" />
+    <circle cx="6" cy="4" r="1.5" style="fill:#C9A84C;" />
+    <!-- Dots (thinking) -->
+    <circle cx="14" cy="22" r="1" style="fill:#4A9DB8; opacity:0.6;" />
+    <circle cx="18" cy="22" r="1" style="fill:#4A9DB8; opacity:0.4;" />
+    <circle cx="22" cy="22" r="1" style="fill:#4A9DB8; opacity:0.2;" />
+  </g>
+
+  <!-- Offline Pennant (cream) -->
+  <g id="status-offline" transform="translate(96,0)">
+    <rect x="6" y="4" width="2" height="26" rx="1" style="fill:#5A5040;" />
+    <polygon points="8,4 26,8 26,10 8,14" style="fill:#B4A690; opacity:0.5;" />
+    <polygon points="8,14 26,10 26,12 8,18" style="fill:#B4A690; opacity:0.3;" />
+    <circle cx="6" cy="4" r="1.5" style="fill:#5A5040;" />
+    <!-- X mark (offline) -->
+    <line x1="14" y1="20" x2="20" y2="26" style="stroke:#B4A690; stroke-width:0.75; opacity:0.4;" />
+    <line x1="20" y1="20" x2="14" y2="26" style="stroke:#B4A690; stroke-width:0.75; opacity:0.4;" />
+  </g>
+</svg>

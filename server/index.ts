@@ -44,6 +44,7 @@ import { SupabasePersistence } from './SupabasePersistence.js'
 import { RoadAggregator } from './RoadAggregator.js'
 import { ObjectiveManager } from './ObjectiveManager.js'
 import { ProductionDataManager } from './ProductionDataManager.js'
+import { HandoffListener } from './HandoffListener.js'
 
 // Supabase persistence (initialized in startServer if env vars present)
 let persistence: SupabasePersistence | null = null
@@ -53,6 +54,9 @@ let objectiveManager: ObjectiveManager | null = null
 
 // Production data manager (Factorio Mode — initialized in main if env vars present)
 let productionManager: ProductionDataManager | null = null
+
+// Handoff listener (Realtime subscription — initialized in main if env vars present)
+let handoffListener: HandoffListener | null = null
 
 // ============================================================================
 // Version (read from package.json)
@@ -3019,6 +3023,14 @@ function main() {
     })
     productionManager.startPolling()
     log('[ProductionDataManager] Initialized and polling')
+
+    // Initialize HandoffListener (Realtime subscription for ae_handoffs → packets)
+    handoffListener = new HandoffListener({ supabaseUrl, supabaseKey })
+    handoffListener.setBroadcast((type, payload) => {
+      broadcast({ type, payload } as any)
+    })
+    handoffListener.start()
+    log('[HandoffListener] Initialized and listening for handoffs')
   } else {
     log('[Persistence] Skipped — SUPABASE_URL or SUPABASE_KEY not set')
   }

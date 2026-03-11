@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="448" height="64" viewBox="0 0 448 64">
+  <!-- Territory Shield Sprite Sheet: 7 shields, each 64x64 -->
+
+  <!-- Lead Gen Shield -->
+  <g id="shield-lead-gen">
+    <path d="M32 4 L56 14 L56 36 Q56 50 32 60 Q8 50 8 36 L8 14 Z"
+          style="fill:#5A4A30; stroke:#C9A84C; stroke-width:1.5;" />
+    <path d="M32 12 L48 19 L48 34 Q48 44 32 52 Q16 44 16 34 L16 19 Z"
+          style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.5;" />
+    <!-- Crosshair/target motif -->
+    <circle cx="32" cy="32" r="6" style="fill:none; stroke:#C9A84C; stroke-width:1;" />
+    <line x1="32" y1="24" x2="32" y2="28" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="32" y1="36" x2="32" y2="40" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="24" y1="32" x2="28" y2="32" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="36" y1="32" x2="40" y2="32" style="stroke:#C9A84C; stroke-width:1;" />
+  </g>
+
+  <!-- Content Shield -->
+  <g id="shield-content" transform="translate(64,0)">
+    <path d="M32 4 L56 14 L56 36 Q56 50 32 60 Q8 50 8 36 L8 14 Z"
+          style="fill:#3A5035; stroke:#C9A84C; stroke-width:1.5;" />
+    <path d="M32 12 L48 19 L48 34 Q48 44 32 52 Q16 44 16 34 L16 19 Z"
+          style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.5;" />
+    <!-- Pen/quill motif -->
+    <line x1="26" y1="40" x2="38" y2="24" style="stroke:#C9A84C; stroke-width:1.5;" />
+    <polygon points="38,24 40,22 42,24 40,26" style="fill:#C9A84C;" />
+    <line x1="24" y1="42" x2="28" y2="38" style="stroke:#C9A84C; stroke-width:1;" />
+  </g>
+
+  <!-- Sales Shield -->
+  <g id="shield-sales" transform="translate(128,0)">
+    <path d="M32 4 L56 14 L56 36 Q56 50 32 60 Q8 50 8 36 L8 14 Z"
+          style="fill:#5A4A2A; stroke:#C9A84C; stroke-width:1.5;" />
+    <path d="M32 12 L48 19 L48 34 Q48 44 32 52 Q16 44 16 34 L16 19 Z"
+          style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.5;" />
+    <!-- Arrow/spear motif (attack/outreach) -->
+    <line x1="22" y1="40" x2="42" y2="24" style="stroke:#C9A84C; stroke-width:1.5;" />
+    <polygon points="42,24 42,29 37,24" style="fill:#C9A84C;" />
+  </g>
+
+  <!-- Fulfillment Shield -->
+  <g id="shield-fulfillment" transform="translate(192,0)">
+    <path d="M32 4 L56 14 L56 36 Q56 50 32 60 Q8 50 8 36 L8 14 Z"
+          style="fill:#504A3A; stroke:#C9A84C; stroke-width:1.5;" />
+    <path d="M32 12 L48 19 L48 34 Q48 44 32 52 Q16 44 16 34 L16 19 Z"
+          style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.5;" />
+    <!-- Gear/cog motif -->
+    <circle cx="32" cy="32" r="5" style="fill:none; stroke:#C9A84C; stroke-width:1.5;" />
+    <circle cx="32" cy="32" r="2" style="fill:#C9A84C;" />
+    <line x1="32" y1="25" x2="32" y2="27" style="stroke:#C9A84C; stroke-width:1.5;" />
+    <line x1="32" y1="37" x2="32" y2="39" style="stroke:#C9A84C; stroke-width:1.5;" />
+    <line x1="25" y1="32" x2="27" y2="32" style="stroke:#C9A84C; stroke-width:1.5;" />
+    <line x1="37" y1="32" x2="39" y2="32" style="stroke:#C9A84C; stroke-width:1.5;" />
+    <line x1="27" y1="27" x2="28.5" y2="28.5" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="35.5" y1="35.5" x2="37" y2="37" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="37" y1="27" x2="35.5" y2="28.5" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="28.5" y1="35.5" x2="27" y2="37" style="stroke:#C9A84C; stroke-width:1;" />
+  </g>
+
+  <!-- Support Shield -->
+  <g id="shield-support" transform="translate(256,0)">
+    <path d="M32 4 L56 14 L56 36 Q56 50 32 60 Q8 50 8 36 L8 14 Z"
+          style="fill:#554540; stroke:#C9A84C; stroke-width:1.5;" />
+    <path d="M32 12 L48 19 L48 34 Q48 44 32 52 Q16 44 16 34 L16 19 Z"
+          style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.5;" />
+    <!-- Wrench/tool motif -->
+    <path d="M28 26 Q26 24 28 22 L30 24 L34 24 L36 22 Q38 24 36 26 L34 28 L36 38 L34 40 L32 38 L30 28 Z"
+          style="fill:none; stroke:#C9A84C; stroke-width:1;" />
+  </g>
+
+  <!-- Retention Shield -->
+  <g id="shield-retention" transform="translate(320,0)">
+    <path d="M32 4 L56 14 L56 36 Q56 50 32 60 Q8 50 8 36 L8 14 Z"
+          style="fill:#454560; stroke:#C9A84C; stroke-width:1.5;" />
+    <path d="M32 12 L48 19 L48 34 Q48 44 32 52 Q16 44 16 34 L16 19 Z"
+          style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.5;" />
+    <!-- Chain link motif (retention/connection) -->
+    <ellipse cx="28" cy="32" rx="5" ry="7" style="fill:none; stroke:#C9A84C; stroke-width:1.25;" />
+    <ellipse cx="36" cy="32" rx="5" ry="7" style="fill:none; stroke:#C9A84C; stroke-width:1.25;" />
+  </g>
+
+  <!-- HQ Shield -->
+  <g id="shield-hq" transform="translate(384,0)">
+    <path d="M32 4 L56 14 L56 36 Q56 50 32 60 Q8 50 8 36 L8 14 Z"
+          style="fill:#504A45; stroke:#C9A84C; stroke-width:1.5;" />
+    <path d="M32 12 L48 19 L48 34 Q48 44 32 52 Q16 44 16 34 L16 19 Z"
+          style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.5;" />
+    <!-- Star/command motif -->
+    <polygon points="32,22 34,28 40,28 35,32 37,38 32,34 27,38 29,32 24,28 30,28"
+             style="fill:#C9A84C; opacity:0.9;" />
+  </g>
+</svg>

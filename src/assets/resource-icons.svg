@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="32" viewBox="0 0 192 32">
+  <!-- Resource Icon Sprite Sheet: 6 icons, each 32x32, brass (#C9A84C) on dark -->
+
+  <!-- Tokens (currency coin) -->
+  <g id="icon-tokens">
+    <circle cx="16" cy="16" r="11" style="fill:#16120E; stroke:#C9A84C; stroke-width:1.5;" />
+    <circle cx="16" cy="16" r="8" style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.5;" />
+    <text x="16" y="20" style="fill:#C9A84C; font-family:monospace; font-size:10px; text-anchor:middle; font-weight:bold;">T</text>
+  </g>
+
+  <!-- Compute (CPU chip) -->
+  <g id="icon-compute" transform="translate(32,0)">
+    <rect x="9" y="9" width="14" height="14" rx="1.5" style="fill:#16120E; stroke:#C9A84C; stroke-width:1.5;" />
+    <rect x="12" y="12" width="8" height="8" rx="0.5" style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.6;" />
+    <!-- Pins -->
+    <line x1="13" y1="7" x2="13" y2="9" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="16" y1="7" x2="16" y2="9" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="19" y1="7" x2="19" y2="9" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="13" y1="23" x2="13" y2="25" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="16" y1="23" x2="16" y2="25" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="19" y1="23" x2="19" y2="25" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="7" y1="13" x2="9" y2="13" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="7" y1="16" x2="9" y2="16" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="7" y1="19" x2="9" y2="19" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="23" y1="13" x2="25" y2="13" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="23" y1="16" x2="25" y2="16" style="stroke:#C9A84C; stroke-width:1;" />
+    <line x1="23" y1="19" x2="25" y2="19" style="stroke:#C9A84C; stroke-width:1;" />
+  </g>
+
+  <!-- Intel (eye) -->
+  <g id="icon-intel" transform="translate(64,0)">
+    <ellipse cx="16" cy="16" rx="10" ry="6" style="fill:#16120E; stroke:#C9A84C; stroke-width:1.5;" />
+    <circle cx="16" cy="16" r="3.5" style="fill:none; stroke:#C9A84C; stroke-width:1;" />
+    <circle cx="16" cy="16" r="1.5" style="fill:#C9A84C;" />
+    <!-- Radar sweep lines -->
+    <line x1="16" y1="8" x2="16" y2="10" style="stroke:#C9A84C; stroke-width:0.75; opacity:0.4;" />
+    <line x1="16" y1="22" x2="16" y2="24" style="stroke:#C9A84C; stroke-width:0.75; opacity:0.4;" />
+  </g>
+
+  <!-- Morale (shield with chevron) -->
+  <g id="icon-morale" transform="translate(96,0)">
+    <path d="M16 4 L26 9 L26 18 Q26 26 16 29 Q6 26 6 18 L6 9 Z"
+          style="fill:#16120E; stroke:#C9A84C; stroke-width:1.5;" />
+    <!-- Chevron inside -->
+    <polyline points="11,16 16,20 21,16" style="fill:none; stroke:#C9A84C; stroke-width:1.25;" />
+    <polyline points="11,12 16,16 21,12" style="fill:none; stroke:#C9A84C; stroke-width:1.25;" />
+  </g>
+
+  <!-- Bandwidth (signal bars) -->
+  <g id="icon-bandwidth" transform="translate(128,0)">
+    <rect x="7" y="22" width="3" height="4" rx="0.5" style="fill:#C9A84C; opacity:0.6;" />
+    <rect x="12" y="18" width="3" height="8" rx="0.5" style="fill:#C9A84C; opacity:0.7;" />
+    <rect x="17" y="13" width="3" height="13" rx="0.5" style="fill:#C9A84C; opacity:0.8;" />
+    <rect x="22" y="8" width="3" height="18" rx="0.5" style="fill:#C9A84C; opacity:0.9;" />
+  </g>
+
+  <!-- Storage (database/cylinder) -->
+  <g id="icon-storage" transform="translate(160,0)">
+    <ellipse cx="16" cy="10" rx="9" ry="3.5" style="fill:#16120E; stroke:#C9A84C; stroke-width:1.25;" />
+    <line x1="7" y1="10" x2="7" y2="22" style="stroke:#C9A84C; stroke-width:1.25;" />
+    <line x1="25" y1="10" x2="25" y2="22" style="stroke:#C9A84C; stroke-width:1.25;" />
+    <ellipse cx="16" cy="22" rx="9" ry="3.5" style="fill:#16120E; stroke:#C9A84C; stroke-width:1.25;" />
+    <!-- Middle divider -->
+    <ellipse cx="16" cy="16" rx="9" ry="3" style="fill:none; stroke:#C9A84C; stroke-width:0.75; opacity:0.4;" />
+  </g>
+</svg>
