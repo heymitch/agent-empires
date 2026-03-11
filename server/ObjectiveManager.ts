@@ -304,10 +304,44 @@ export class ObjectiveManager {
     return this.lastObjectives
   }
 
+  // ── Stalled Detection ───────────────────────────────────────────────────
+
+  private lastHpSnapshot: Map<string, number> = new Map()
+  private lastHpChangeTime: Map<string, number> = new Map()
+  private STALL_THRESHOLD_MS = 30 * 60 * 1000 // 30 minutes
+
+  private async detectStalled(objectives: Objective[]): Promise<void> {
+    const now = Date.now()
+
+    for (const obj of objectives) {
+      if (obj.status !== 'under_attack') continue
+
+      const prevHp = this.lastHpSnapshot.get(obj.id)
+      if (prevHp !== undefined && prevHp !== obj.hp_remaining) {
+        // HP changed — reset timer
+        this.lastHpChangeTime.set(obj.id, now)
+      } else if (!this.lastHpChangeTime.has(obj.id)) {
+        // First time seeing this objective — start timer
+        this.lastHpChangeTime.set(obj.id, now)
+      }
+
+      this.lastHpSnapshot.set(obj.id, obj.hp_remaining)
+
+      // Check for stall
+      const lastChange = this.lastHpChangeTime.get(obj.id) || now
+      if (now - lastChange > this.STALL_THRESHOLD_MS) {
+        console.log(`[ObjectiveManager] Stalled: "${obj.name}" — no HP change for 30+ min`)
+        await this.updateStatus(obj.id, 'stalled')
+        this.lastHpChangeTime.delete(obj.id)
+      }
+    }
+  }
+
   // ── Poll + Broadcast ─────────────────────────────────────────────────────
 
   async fetchAndBroadcast(): Promise<void> {
     const objectives = await this.getObjectives()
+    await this.detectStalled(objectives)
     this.lastObjectives = objectives
     if (this.broadcastFn) {
       this.broadcastFn('objectives', objectives)
