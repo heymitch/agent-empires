@@ -249,12 +249,13 @@ export class BattlefieldRenderer {
       unit.setZoomScale(this.zoom)
     }
 
-    // Update fog
-    const unitPositions = Array.from(this.units.values()).map(u => ({
-      x: u.worldX,
-      y: u.worldY,
-    }))
-    this.fogOfWar.update(unitPositions, new Map())
+    // Fog disabled — too aggressive at current settings, renders 85% dark
+    // tiles across entire world. Needs tuning before re-enabling.
+    // const unitPositions = Array.from(this.units.values()).map(u => ({
+    //   x: u.worldX,
+    //   y: u.worldY,
+    // }))
+    // this.fogOfWar.update(unitPositions, new Map())
 
     // Update terrain (animated flow lines, pulsing borders)
     this.terrainRenderer.draw(this.app.ticker.deltaMS / 1000)

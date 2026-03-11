@@ -301,7 +301,7 @@ export class TerrainRenderer {
       });
       const label = new Text({ text: def.label.toUpperCase(), style });
       label.anchor.set(0.5, 0.5);
-      label.alpha = 0.35;
+      label.alpha = 0.6;
       label.x = def.center[0];
       label.y = def.center[1] - 200;
       tc.addChild(label);

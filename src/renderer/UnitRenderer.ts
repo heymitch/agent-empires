@@ -29,13 +29,13 @@ const STATUS_COLORS: Record<UnitStatus, number> = {
 }
 
 const TERRITORY_UNIT_COLORS: Record<TerritoryId, number> = {
-  'lead-gen': 0x3A3020,
-  'content': 0x2A3025,
-  'sales': 0x3A2A1A,
-  'fulfillment': 0x302A20,
-  'support': 0x352520,
-  'retention': 0x252530,
-  'hq': 0x302A25,
+  'lead-gen': 0x5A4A30,
+  'content': 0x3A5035,
+  'sales': 0x5A4A2A,
+  'fulfillment': 0x504A3A,
+  'support': 0x554540,
+  'retention': 0x454560,
+  'hq': 0x504A45,
 }
 
 export class UnitRenderer {
@@ -156,13 +156,15 @@ export class UnitRenderer {
           pts.push(Math.cos(angle) * r, Math.sin(angle) * r)
         }
         this.body.poly(pts).fill({ color, alpha: 0.9 })
+        this.body.poly(pts).stroke({ color: cfg.accent, width: 2, alpha: 0.5 })
         // Inner highlight
         this.body.circle(0, -4, r * 0.4).fill({ color: 0xffffff, alpha: 0.08 })
         break
       }
       case 'operations': {
-        // Circle (original)
+        // Circle
         this.body.circle(0, 0, cfg.radius).fill({ color, alpha: 0.9 })
+        this.body.circle(0, 0, cfg.radius).stroke({ color: cfg.accent, width: 2, alpha: 0.5 })
         this.body.circle(0, -4, cfg.radius * 0.5).fill({ color: 0xffffff, alpha: 0.08 })
         break
       }
@@ -170,6 +172,7 @@ export class UnitRenderer {
         // Diamond
         const r = cfg.radius
         this.body.poly([0, -r, r, 0, 0, r, -r, 0]).fill({ color, alpha: 0.9 })
+        this.body.poly([0, -r, r, 0, 0, r, -r, 0]).stroke({ color: cfg.accent, width: 2, alpha: 0.5 })
         this.body.circle(0, -2, r * 0.35).fill({ color: 0xffffff, alpha: 0.08 })
         break
       }
