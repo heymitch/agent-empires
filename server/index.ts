@@ -3330,7 +3330,7 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
         const amountCents: number = data.charges?.total ?? 0
         const currency: string = data.currency ?? 'USD'
         const customerEmail: string = customer.email ?? null
-        const customerName: string = [customer.first_name, customer.last_name].filter(Boolean).join(' ') || null
+        const customerName: string | null = [customer.first_name, customer.last_name].filter(Boolean).join(' ') || null
         const productName: string = data.product?.name ?? null
         const description: string = productName
           ? `${eventType}: ${productName} — $${(amountCents / 100).toFixed(2)} ${currency}`
