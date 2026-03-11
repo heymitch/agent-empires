@@ -231,6 +231,10 @@ async function init() {
     return battlefield.terrainRenderer.getTerritoryCenter(territory as TerritoryId)
   }
   threatRenderer = new ThreatRenderer(battlefield.threatLayer, getTerritoryCenter)
+
+  // Wire threat positions into minimap for red triangle markers
+  battlefield.minimapRenderer.setThreatPositionGetter(() => threatRenderer.getThreatPositions())
+
   connectionLineRenderer = new ConnectionLineRenderer(battlefield.connectionLayer)
   roadRenderer = new RoadRenderer(
     battlefield.roadLayer,

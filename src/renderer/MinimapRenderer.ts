@@ -1,13 +1,15 @@
 /**
  * MinimapRenderer - Small overview map in bottom-left
  *
- * Shows territories as colored blobs, units as bright dots,
- * and the camera viewport as a white rectangle.
+ * Shows territories as filled polygons with borders, units as status-colored
+ * dots sized by class, threat markers as red triangles, and the camera
+ * viewport as a white rectangle.
  */
 
 import { Application, Container, Graphics } from 'pixi.js'
 import type { BattlefieldRenderer } from './BattlefieldRenderer'
-import type { UnitRenderer } from './UnitRenderer'
+import type { UnitRenderer, UnitStatus, UnitClass } from './UnitRenderer'
+import type { TerrainRenderer } from './TerrainRenderer'
 import { WORLD_WIDTH, WORLD_HEIGHT } from './constants'
 
 const MINIMAP_WIDTH = 200
@@ -15,15 +17,22 @@ const MINIMAP_HEIGHT = 150
 const SCALE_X = MINIMAP_WIDTH / WORLD_WIDTH
 const SCALE_Y = MINIMAP_HEIGHT / WORLD_HEIGHT
 
-const TERRITORY_MINIMAP: { x: number; y: number; w: number; h: number; color: number }[] = [
-  { x: 1400, y: 50, w: 1200, h: 500, color: 0x2a4a3a },   // lead-gen
-  { x: 400, y: 700, w: 800, h: 600, color: 0x2a3a4a },     // content
-  { x: 1700, y: 700, w: 600, h: 600, color: 0x4a3a2a },    // sales
-  { x: 2800, y: 700, w: 800, h: 600, color: 0x3a2a4a },    // fulfillment
-  { x: 1600, y: 1400, w: 800, h: 400, color: 0x4a2a2a },   // support
-  { x: 1600, y: 1900, w: 800, h: 400, color: 0x2a2a4a },   // retention
-  { x: 1700, y: 2400, w: 600, h: 400, color: 0x3a3a3a },   // hq
-]
+// Status colors for unit dots on the minimap
+const MINIMAP_STATUS_COLORS: Record<UnitStatus, string> = {
+  idle:      '#82C896',
+  working:   '#E8682A',
+  combat:    '#CC3333',
+  thinking:  '#4A9DB8',
+  exhausted: '#8B7355',
+  offline:   '#666666',
+}
+
+// Unit dot radius by class
+const MINIMAP_DOT_SIZE: Record<UnitClass, number> = {
+  recon:      3,
+  operations: 4,
+  command:    5,
+}
 
 export class MinimapRenderer {
   private canvas: HTMLCanvasElement
@@ -31,6 +40,7 @@ export class MinimapRenderer {
   private battlefield: BattlefieldRenderer
   private units: Map<string, UnitRenderer>
   private onJump: (x: number, y: number) => void
+  private getThreatPositions: (() => Array<{ x: number; y: number }>) | null = null
 
   // Viewport rect
   private vpX = 0
@@ -70,6 +80,11 @@ export class MinimapRenderer {
     })
   }
 
+  /** Wire up threat position getter (called from main.ts after ThreatRenderer is created) */
+  setThreatPositionGetter(getter: () => Array<{ x: number; y: number }>): void {
+    this.getThreatPositions = getter
+  }
+
   updateViewport(camX: number, camY: number, viewW: number, viewH: number): void {
     this.vpX = (camX - viewW / 2) * SCALE_X
     this.vpY = (camY - viewH / 2) * SCALE_Y
@@ -85,20 +100,61 @@ export class MinimapRenderer {
     ctx.fillStyle = '#16120E'
     ctx.fillRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT)
 
-    // Territories
-    for (const t of TERRITORY_MINIMAP) {
-      ctx.fillStyle = this.hexToRgba(t.color, 0.3)
-      ctx.fillRect(t.x * SCALE_X, t.y * SCALE_Y, t.w * SCALE_X, t.h * SCALE_Y)
+    // Territory fills and borders from TerrainRenderer polygon data
+    const terrainRenderer = this.battlefield.terrainRenderer
+    if (terrainRenderer) {
+      const territories = terrainRenderer.getAllTerritories()
+      for (const def of territories) {
+        const poly = def.polygon
+        if (poly.length < 4) continue
+
+        // Build scaled path
+        ctx.beginPath()
+        ctx.moveTo(poly[0] * SCALE_X, poly[1] * SCALE_Y)
+        for (let i = 2; i < poly.length; i += 2) {
+          ctx.lineTo(poly[i] * SCALE_X, poly[i + 1] * SCALE_Y)
+        }
+        ctx.closePath()
+
+        // Filled polygon at low alpha
+        ctx.fillStyle = this.hexToRgba(def.baseColor, 0.2)
+        ctx.fill()
+
+        // Thin border at slightly higher alpha
+        ctx.strokeStyle = this.hexToRgba(def.baseColor, 0.4)
+        ctx.lineWidth = 1
+        ctx.stroke()
+      }
     }
 
-    // Units as bright dots
+    // Units as status-colored dots sized by class
     for (const unit of this.units.values()) {
       const sx = unit.worldX * SCALE_X
       const sy = unit.worldY * SCALE_Y
-      ctx.fillStyle = unit.status === 'offline' ? '#ff3366' : '#00ffcc'
+      const color = MINIMAP_STATUS_COLORS[unit.status] || '#666666'
+      const radius = MINIMAP_DOT_SIZE[unit.unitClass] || 4
+
+      ctx.fillStyle = color
       ctx.beginPath()
-      ctx.arc(sx, sy, 3, 0, Math.PI * 2)
+      ctx.arc(sx, sy, radius, 0, Math.PI * 2)
       ctx.fill()
+    }
+
+    // Threat dots as tiny red triangles
+    if (this.getThreatPositions) {
+      const threats = this.getThreatPositions()
+      ctx.fillStyle = '#CC3333'
+      for (const t of threats) {
+        const sx = t.x * SCALE_X
+        const sy = t.y * SCALE_Y
+        const s = 3 // triangle half-size
+        ctx.beginPath()
+        ctx.moveTo(sx, sy - s)
+        ctx.lineTo(sx + s, sy + s)
+        ctx.lineTo(sx - s, sy + s)
+        ctx.closePath()
+        ctx.fill()
+      }
     }
 
     // Viewport rectangle
