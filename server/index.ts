@@ -2932,6 +2932,98 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
     return
   }
 
+  // ========================================================================
+  // POST /webhooks/samcart — SamCart webhook receiver
+  // ========================================================================
+  if (req.method === 'POST' && req.url === '/webhooks/samcart') {
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_KEY
+    collectRequestBody(req).then(body => {
+      try {
+        const event = JSON.parse(body)
+        const eventType: string = event.type ?? 'unknown'
+        const data = event.data ?? {}
+        const orderId: string = data.id ?? null
+        const customer = data.customer ?? {}
+        const amountCents: number = data.charges?.total ?? 0
+        const currency: string = data.currency ?? 'USD'
+        const customerEmail: string = customer.email ?? null
+        const customerName: string = [customer.first_name, customer.last_name].filter(Boolean).join(' ') || null
+        const productName: string = data.product?.name ?? null
+        const description: string = productName
+          ? `${eventType}: ${productName} — $${(amountCents / 100).toFixed(2)} ${currency}`
+          : `${eventType}: $${(amountCents / 100).toFixed(2)} ${currency}`
+
+        log(`[SamCart] Received ${eventType} — $${(amountCents / 100).toFixed(2)} ${currency}`)
+
+        // Fire-and-forget: persist to ae_transactions via Supabase REST
+        if (supabaseUrl && supabaseKey) {
+          fetch(`${supabaseUrl}/rest/v1/ae_transactions`, {
+            method: 'POST',
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({
+              stripe_event_id: orderId,
+              type: `samcart.${eventType}`,
+              amount_cents: amountCents,
+              currency: currency.toLowerCase(),
+              customer_id: customer.id ?? customerEmail,
+              description,
+              metadata: { customer_email: customerEmail, customer_name: customerName, product: productName },
+            }),
+          }).then(r => {
+            if (!r.ok) r.text().then(t => console.error(`[SamCart] Supabase insert failed (${r.status}): ${t}`))
+          }).catch(err => console.error('[SamCart] Supabase insert error:', err))
+        }
+
+        // Broadcast to WebSocket clients based on event type
+        if (eventType === 'order.completed') {
+          broadcast({
+            type: 'resource_update',
+            payload: {
+              type: 'revenue',
+              amount: amountCents / 100,
+              description,
+            },
+          } as ServerMessage)
+        }
+
+        if (eventType === 'subscription.canceled' || eventType === 'order.refunded') {
+          broadcast({
+            type: 'threat',
+            payload: {
+              id: orderId ?? randomUUID(),
+              type: 'churn_risk',
+              severity: 'elevated',
+              territory: 'sales',
+              title: eventType === 'order.refunded' ? 'Order Refunded' : 'Subscription Cancelled',
+              description: `${customerName ?? customerEmail ?? 'Unknown customer'} — ${description}`,
+              sourceTable: 'ae_transactions',
+              sourceId: orderId ?? '',
+              timestamp: Date.now(),
+            },
+          } as ServerMessage)
+        }
+
+        // Always return 200 immediately (SamCart expects fast acknowledgement)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, received: eventType }))
+      } catch (e) {
+        console.error('[SamCart] Parse error:', e)
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+      }
+    }).catch(() => {
+      res.writeHead(413, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Request body too large' }))
+    })
+    return
+  }
+
   // GET /tiles - List all text tiles
   if (req.method === 'GET' && req.url === '/tiles') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
