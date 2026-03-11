@@ -7,6 +7,7 @@ import {
   THREAT_CLASS_CONFIGS,
   SEVERITY_SHAPE,
 } from '../../shared/threatClasses'
+import { EnemyAI, type UnitPosition } from '../game/EnemyAI'
 
 export interface ThreatEvent {
   id: string
@@ -219,6 +220,7 @@ export class ThreatRenderer {
   private layer: Container
   private getTerritoryCenter: TerritoryBoundsGetter
   private threats: Map<string, ActiveThreat> = new Map()
+  readonly enemyAI = new EnemyAI()
 
   constructor(layer: Container, getTerritoryCenter: TerritoryBoundsGetter) {
     this.layer = layer
@@ -308,6 +310,9 @@ export class ThreatRenderer {
       animState: 'entering',
       animElapsed: 0,
     })
+
+    // Register with EnemyAI for behavior state machine
+    this.enemyAI.addEnemy(event, container.x, container.y)
   }
 
   removeThreat(id: string): void {
@@ -317,13 +322,24 @@ export class ThreatRenderer {
 
     threat.animState = 'exiting'
     threat.animElapsed = 0
+    this.enemyAI.removeEnemy(id)
   }
 
-  update(dt: number): void {
+  update(dt: number, unitPositions?: UnitPosition[]): void {
     const dtSeconds = dt / 1000
+
+    // Tick enemy AI state machines (dt in seconds)
+    this.enemyAI.update(dtSeconds, unitPositions ?? [])
 
     for (const [id, threat] of this.threats) {
       const { config } = threat
+
+      // Apply EnemyAI position to the visual container
+      const enemyState = this.enemyAI.getEnemy(id)
+      if (enemyState) {
+        threat.container.x = enemyState.x
+        threat.container.y = enemyState.y
+      }
 
       // Handle pop-in / pop-out (counter-scale Y for isometric tilt)
       const isoY = 1 / ISO_TILT
