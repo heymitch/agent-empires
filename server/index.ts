@@ -3028,6 +3028,126 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
   }
 
   // -------------------------------------------------------------------------
+  // Campaign Management API
+  // -------------------------------------------------------------------------
+
+  // POST /campaigns — create a new campaign
+  if (req.method === 'POST' && req.url === '/campaigns') {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized (no Supabase)' }))
+      return
+    }
+    collectRequestBody(req).then(async body => {
+      try {
+        const data = JSON.parse(body)
+        if (!data.name) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'name required' }))
+          return
+        }
+        const campaign = await objectiveManager!.createCampaign(data)
+        if (campaign) {
+          log(`[Campaigns] Created: "${campaign.name}"${campaign.territory ? ` in ${campaign.territory}` : ''}`)
+          res.writeHead(201, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, campaign }))
+        } else {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Failed to create campaign' }))
+        }
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+      }
+    }).catch(() => {
+      res.writeHead(413, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Request body too large' }))
+    })
+    return
+  }
+
+  // GET /campaigns — list active campaigns with progress stats
+  if (req.method === 'GET' && req.url === '/campaigns') {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized (no Supabase)' }))
+      return
+    }
+    objectiveManager.getCampaigns().then(campaigns => {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, campaigns }))
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: String(err) }))
+    })
+    return
+  }
+
+  // GET /campaigns/:id — single campaign with its objectives
+  const campaignDetailMatch = req.url?.match(/^\/campaigns\/([a-f0-9-]+)$/)
+  if (req.method === 'GET' && campaignDetailMatch) {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized' }))
+      return
+    }
+    const campaignId = campaignDetailMatch[1]
+    Promise.all([
+      objectiveManager.getCampaign(campaignId),
+      objectiveManager.getCampaignObjectives(campaignId),
+    ]).then(([campaign, objectives]) => {
+      if (!campaign) {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Campaign not found' }))
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, campaign, objectives }))
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: String(err) }))
+    })
+    return
+  }
+
+  // POST /campaigns/:id/add-objective — link an objective to a campaign
+  const campaignAddObjMatch = req.url?.match(/^\/campaigns\/([a-f0-9-]+)\/add-objective$/)
+  if (req.method === 'POST' && campaignAddObjMatch) {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized' }))
+      return
+    }
+    const campaignId = campaignAddObjMatch[1]
+    collectRequestBody(req).then(async body => {
+      try {
+        const { objective_id } = JSON.parse(body)
+        if (!objective_id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'objective_id required' }))
+          return
+        }
+        const objective = await objectiveManager!.addObjectiveToCampaign(campaignId, objective_id)
+        if (objective) {
+          log(`[Campaigns] Linked objective "${objective.name}" to campaign ${campaignId.slice(0, 8)}`)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, objective }))
+        } else {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Failed to link objective to campaign' }))
+        }
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+      }
+    }).catch(() => {
+      res.writeHead(413, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Request body too large' }))
+    })
+    return
+  }
+
+  // -------------------------------------------------------------------------
   // Production Chain API (Factorio Mode)
   // -------------------------------------------------------------------------
 

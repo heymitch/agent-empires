@@ -36,6 +36,28 @@ export interface ObjectiveAssignment {
   hp_drained: number
 }
 
+export interface Campaign {
+  id: string
+  name: string
+  description: string | null
+  status: string
+  territory: string | null
+  total_hp: number
+  defeated_hp: number
+  objective_count: number
+  defeated_count: number
+  metadata: Record<string, unknown> | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface CreateCampaignInput {
+  name: string
+  description?: string
+  territory?: string
+  metadata?: Record<string, unknown>
+}
+
 export interface CreateObjectiveInput {
   name: string
   description?: string
@@ -167,8 +189,15 @@ export class ObjectiveManager {
       }
 
       const rows = await res.json() as Objective[]
+      const updated = rows[0] || null
+
+      // Recalculate campaign progress if objective belongs to a campaign
+      if (updated && current.campaign_id) {
+        await this.recalculateCampaignProgress(current.campaign_id)
+      }
+
       this.fetchAndBroadcast()
-      return rows[0] || null
+      return updated
     } catch (err) {
       console.log('[ObjectiveManager] UPDATE HP error:', err)
       return null
@@ -177,6 +206,9 @@ export class ObjectiveManager {
 
   async updateStatus(objectiveId: string, status: string): Promise<Objective | null> {
     try {
+      // Read current state to check campaign membership
+      const current = await this.getObjective(objectiveId)
+
       const updates: Record<string, unknown> = { status }
       if (status === 'defeated') {
         updates.defeated_at = new Date().toISOString()
@@ -195,8 +227,15 @@ export class ObjectiveManager {
       }
 
       const rows = await res.json() as Objective[]
+      const updated = rows[0] || null
+
+      // Recalculate campaign progress if objective belongs to a campaign
+      if (updated && current?.campaign_id) {
+        await this.recalculateCampaignProgress(current.campaign_id)
+      }
+
       this.fetchAndBroadcast()
-      return rows[0] || null
+      return updated
     } catch (err) {
       console.log('[ObjectiveManager] UPDATE STATUS error:', err)
       return null
@@ -295,6 +334,148 @@ export class ObjectiveManager {
       return await res.json() as ObjectiveAssignment[]
     } catch {
       return []
+    }
+  }
+
+  // ── Campaign CRUD ───────────────────────────────────────────────────────
+
+  async createCampaign(input: CreateCampaignInput): Promise<Campaign | null> {
+    try {
+      const body: Record<string, unknown> = {
+        name: input.name,
+        status: 'active',
+      }
+      if (input.description) body.description = input.description
+      if (input.territory) body.territory = input.territory
+      if (input.metadata) body.metadata = input.metadata
+
+      const res = await fetch(`${this.url}/rest/v1/ae_campaigns`, {
+        method: 'POST',
+        headers: this.headers('return=representation'),
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.log(`[CampaignManager] CREATE failed (${res.status}): ${text}`)
+        return null
+      }
+
+      const rows = await res.json() as Campaign[]
+      return rows[0] || null
+    } catch (err) {
+      console.log('[CampaignManager] CREATE error:', err)
+      return null
+    }
+  }
+
+  async getCampaign(campaignId: string): Promise<Campaign | null> {
+    try {
+      const res = await fetch(
+        `${this.url}/rest/v1/ae_campaigns?id=eq.${campaignId}&select=*`,
+        { headers: this.headers() }
+      )
+      if (!res.ok) return null
+      const rows = await res.json() as Campaign[]
+      return rows[0] || null
+    } catch {
+      return null
+    }
+  }
+
+  async getCampaigns(): Promise<Campaign[]> {
+    try {
+      const res = await fetch(
+        `${this.url}/rest/v1/ae_campaigns?status=neq.archived&order=created_at.desc&select=*`,
+        { headers: this.headers() }
+      )
+      if (!res.ok) {
+        console.log(`[CampaignManager] GET campaigns failed (${res.status})`)
+        return []
+      }
+      return await res.json() as Campaign[]
+    } catch (err) {
+      console.log('[CampaignManager] GET campaigns error:', err)
+      return []
+    }
+  }
+
+  async addObjectiveToCampaign(campaignId: string, objectiveId: string): Promise<Objective | null> {
+    try {
+      // Update objective's campaign_id
+      const res = await fetch(`${this.url}/rest/v1/ae_objectives?id=eq.${objectiveId}`, {
+        method: 'PATCH',
+        headers: this.headers('return=representation'),
+        body: JSON.stringify({ campaign_id: campaignId }),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.log(`[CampaignManager] ADD OBJECTIVE failed (${res.status}): ${text}`)
+        return null
+      }
+
+      const rows = await res.json() as Objective[]
+      const obj = rows[0] || null
+
+      // Recalculate campaign progress
+      await this.recalculateCampaignProgress(campaignId)
+      this.fetchAndBroadcast()
+
+      return obj
+    } catch (err) {
+      console.log('[CampaignManager] ADD OBJECTIVE error:', err)
+      return null
+    }
+  }
+
+  async recalculateCampaignProgress(campaignId: string): Promise<Campaign | null> {
+    try {
+      // Fetch all objectives for this campaign
+      const objectives = await this.getCampaignObjectives(campaignId)
+
+      const totalHp = objectives.reduce((sum, o) => sum + o.hp_total, 0)
+      const defeatedHp = objectives.reduce((sum, o) => sum + (o.hp_total - o.hp_remaining), 0)
+      const objectiveCount = objectives.length
+      const defeatedCount = objectives.filter(o => o.status === 'defeated').length
+
+      const updates: Record<string, unknown> = {
+        total_hp: totalHp,
+        defeated_hp: defeatedHp,
+        objective_count: objectiveCount,
+        defeated_count: defeatedCount,
+      }
+
+      // Auto-complete campaign when all objectives defeated
+      if (objectiveCount > 0 && defeatedCount === objectiveCount) {
+        updates.status = 'completed'
+        updates.completed_at = new Date().toISOString()
+      }
+
+      const res = await fetch(`${this.url}/rest/v1/ae_campaigns?id=eq.${campaignId}`, {
+        method: 'PATCH',
+        headers: this.headers('return=representation'),
+        body: JSON.stringify(updates),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.log(`[CampaignManager] RECALC failed (${res.status}): ${text}`)
+        return null
+      }
+
+      const rows = await res.json() as Campaign[]
+      const campaign = rows[0] || null
+
+      // Broadcast campaign update
+      if (campaign && this.broadcastFn) {
+        this.broadcastFn('campaign_update', campaign)
+      }
+
+      return campaign
+    } catch (err) {
+      console.log('[CampaignManager] RECALC error:', err)
+      return null
     }
   }
 

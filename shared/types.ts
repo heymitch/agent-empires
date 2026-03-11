@@ -213,6 +213,23 @@ export type ServerMessage =
   | { type: 'monitor'; payload: { heartbeats: Record<string, unknown>; revenue: { mrr: number; transactions: unknown[] }; support: { openTickets: number; urgentCount: number } } }
   | { type: 'waste_report'; payload: WasteReport }
   | { type: 'fleet_restore'; payload: { sessions: unknown[]; roads: unknown[]; objectives: unknown[]; threats: unknown[] } }
+  | { type: 'campaign_update'; payload: Campaign }
+
+/** Campaign data */
+export interface Campaign {
+  id: string
+  name: string
+  description: string | null
+  status: string  // active, completed, archived
+  territory: string | null
+  total_hp: number
+  defeated_hp: number
+  objective_count: number
+  defeated_count: number
+  metadata: Record<string, unknown> | null
+  created_at: string
+  completed_at: string | null
+}
 
 /** Client -> Server messages */
 export type ClientMessage =
