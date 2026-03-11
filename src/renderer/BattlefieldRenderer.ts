@@ -249,13 +249,11 @@ export class BattlefieldRenderer {
       unit.setZoomScale(this.zoom)
     }
 
-    // Fog disabled — too aggressive at current settings, renders 85% dark
-    // tiles across entire world. Needs tuning before re-enabling.
-    // const unitPositions = Array.from(this.units.values()).map(u => ({
-    //   x: u.worldX,
-    //   y: u.worldY,
-    // }))
-    // this.fogOfWar.update(unitPositions, new Map())
+    // Fog of war — tuned to 45% dark (atmospheric, not blinding), 500px visibility radius
+    const unitPositions = Array.from(this.units.values())
+      .filter(u => u.status !== 'offline')
+      .map(u => ({ x: u.worldX, y: u.worldY }))
+    this.fogOfWar.update(unitPositions, new Map())
 
     // Update terrain (animated flow lines, pulsing borders)
     this.terrainRenderer.draw(this.app.ticker.deltaMS / 1000)

@@ -10,12 +10,12 @@ import {
 const DEFAULT_WORLD_WIDTH = 4096;
 const DEFAULT_WORLD_HEIGHT = 4096;
 
-// Visibility circle radius in world units
-const VISIBILITY_RADIUS = 300;
+// Visibility circle radius in world units — generous to keep battlefield readable
+const VISIBILITY_RADIUS = 500;
 
-// Fog opacity levels
-const DARK_OPACITY = 0.85;
-const STALE_OPACITY = 0.40;
+// Fog opacity levels — tuned to be atmospheric, not blinding
+const DARK_OPACITY = 0.45;
+const STALE_OPACITY = 0.20;
 
 // Time thresholds (milliseconds)
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;   // 2 min
