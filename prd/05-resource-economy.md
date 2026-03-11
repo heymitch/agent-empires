@@ -2,6 +2,23 @@
 
 ## PRD 05: The War Chest
 
+> ### Status Summary (2026-03-10)
+>
+> **Assessment:** ResourceBar ships with revenue display, token aggregation, unit count, and score. The full economy (Morale resource, Economy Panel, Stripe webhook edge function, sparklines, income/expense feed) is unimplemented.
+>
+> - [x] **ResourceBar HUD (revenue, tokens, units, score)** — `src/hud/ResourceBar.ts`
+> - [x] **Token tracking per session** — `ResourceBar.ts` accumulates per-session token estimates
+> - [x] **Score display** — `ResourceBar.ts` renders campaign score
+> - [x] **Revenue display ($MTD)** — `ResourceBar.ts` renders revenue field
+> - [ ] **MORALE resource (4th primary resource)** — not implemented anywhere in src
+> - [ ] **Economy Panel (expanded breakdown view)** — no EconomyPanel component found
+> - [ ] **Supabase `ae_transactions` table** — referenced only in PRDs, no server code writes to it
+> - [ ] **Stripe webhook edge function** — exists only as code block in this PRD, not deployed
+> - [ ] **Income/expense live feed** — not implemented
+> - [ ] **30-day sparkline on hover** — not implemented
+> - [ ] **Resource particle animations (gold burst, coin-drain)** — not implemented
+> - [ ] **Napoleon aesthetic (brass coin icons, parchment textures)** — not implemented
+
 **Depends on:** `01-vision.md` (resource bar, campaign score), `02-physics-and-movement.md` (territory layout), `02c-combat-and-roads-spec.md` (particle systems)
 **Status:** Design spec
 **Last updated:** 2026-03-10

@@ -9,6 +9,29 @@
 
 ---
 
+> ### STATUS SUMMARY (Audit 2026-03-10)
+>
+> **Overall: NOT STARTED — pure spec, zero implementation**
+>
+> | Component | PRD Spec | Code Reality |
+> |-----------|----------|--------------|
+> | **Zoom tiers (theater/national/global)** | Three tiers with opacity cross-fade at 0.08-0.12 and 0.25-0.35 | `BattlefieldRenderer.ts` has a single linear zoom (0.15-2.0) with no tier detection, no layer compositor, no opacity curves |
+> | **Semantic zoom (detail reduction at low zoom)** | Labels fade, roads thin, sprites shrink to dots at zoom < 0.3 | `UnitRenderer.setZoomScale()` counter-scales labels to stay readable — the opposite of PRD intent. `TerrainRenderer` renders at full detail regardless of zoom |
+> | **National base map** | Stylized US map from GeoJSON, Magnetic Residue aesthetic | Does not exist. No geo assets, no `us-states-simplified.json`, no national renderer |
+> | **Global base map** | World continent outlines, macro force visualization | Does not exist |
+> | **ZoomController class** | Exponential zoom, tier detection, camera center interpolation | Does not exist. Zoom is handled inline in `BattlefieldRenderer.setupInputHandlers()` with linear delta |
+> | **Aesthetic transition** | Parchment-to-Magnetic-Residue color/font lerp | Does not exist. Background is already dark (#16120E) — no parchment phase to transition from |
+> | **Competitor/deal/macro data layers** | Monitor-fed markers at geographic positions | Does not exist. No monitors, no data sources, no national/global renderers |
+>
+> **What exists that PRD 11 can build on:**
+> - `BattlefieldRenderer` already has pan/zoom with worldContainer transform — refactorable into ZoomController
+> - `UnitRenderer.setZoomScale()` proves zoom-reactive rendering works — just needs to reduce detail instead of preserving it
+> - The Magnetic Residue palette is already the default aesthetic (background `#16120E`, PAL constants in TerrainRenderer) — the parchment-to-MR transition is backwards from reality; the theater IS already MR
+>
+> **Blocking dependencies:** Monitor Orchestrator (PRD 04) for national/global data layers. Theater tier works standalone.
+
+---
+
 ## Table of Contents
 
 1. [Vision](#1-vision)

@@ -2,6 +2,21 @@
 
 ## Sub-PRD 07 — Distant Armies
 
+> ### Status Summary (2026-03-10)
+>
+> **Assessment:** Nothing from this spec is implemented. No remote-bridge, no DispatchPanel, no RemoteOverlay, no remote machine config. This is entirely a design spec.
+>
+> - [ ] **RemoteForces orchestrator (`server/RemoteForces.ts`)** — does not exist
+> - [ ] **RemoteCommands (`server/RemoteCommands.ts`)** — does not exist
+> - [ ] **SupabaseRelay (`server/SupabaseRelay.ts`)** — does not exist
+> - [ ] **RemoteEventValidator** — does not exist
+> - [ ] **DispatchPanel UI (`src/ui/DispatchPanel.ts`)** — does not exist
+> - [ ] **RemoteOverlay renderer (`src/renderer/RemoteOverlay.ts`)** — does not exist
+> - [ ] **ArmyGroupRenderer (`src/renderer/ArmyGroupRenderer.ts`)** — does not exist
+> - [ ] **remote-bridge/ HTTP bridge** — directory does not exist
+> - [ ] **Remote machine config / registration** — not implemented
+> - [ ] **Supabase tables (`ae_remote_events`, `ae_dispatches`, `ae_command_audit`)** — not created
+
 **Parent PRD:** `01-vision.md` (Phase 5: Integration)
 **Dependencies:** `shared/types.ts` (event types), `server/index.ts` (WebSocket server, POST /event), `hooks/vibecraft-hook.sh` (event producer)
 **System:** Remote machine event ingestion, command delivery, chat interface, multi-machine topology

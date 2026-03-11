@@ -681,80 +681,80 @@ supabase
 
 ## 10. Build Plan
 
-### Phase 0: Foundation (Days 1-2) — THIS WINDOW
+### Phase 0: Foundation (Days 1-2) — SHIPPED
 
 What the current prime agent session handles:
 
-- [x] Fork Vibecraft → agent-empires
-- [ ] Rename package, update CLAUDE.md, strip README
-- [ ] Replace Three.js with PixiJS (swap renderer, keep everything else)
-- [ ] Basic territory map with 6 zones (lead-gen, sales, fulfillment, support, retention, HQ)
-- [ ] Unit sprites that position in territories based on session data
-- [ ] Basic HUD scaffold (resource bar, intel panel, minimap, command bar)
-- [ ] Wire existing session management to new renderer
-- [ ] Keep all tmux/hook/WebSocket plumbing untouched
+- [x] Fork Vibecraft → agent-empires — **SHIPPED**
+- [x] Rename package, update CLAUDE.md, strip README — **SHIPPED** (package.json = "agent-empires")
+- [x] Replace Three.js with PixiJS (swap renderer, keep everything else) — **SHIPPED** (`BattlefieldRenderer.ts`, PixiJS Application + layered containers)
+- [x] Basic territory map with 6 zones (lead-gen, sales, fulfillment, support, retention, HQ) — **SHIPPED** (7 territories including content; `TerrainRenderer.ts`)
+- [x] Unit sprites that position in territories based on session data — **SHIPPED** (`UnitRenderer.ts` + `GameState.ts`)
+- [x] Basic HUD scaffold (resource bar, intel panel, minimap, command bar) — **SHIPPED** (all 4 HUD components implemented)
+- [x] Wire existing session management to new renderer — **SHIPPED** (`main.ts` ~52KB, full EventClient + handler wiring)
+- [x] Keep all tmux/hook/WebSocket plumbing untouched — **SHIPPED** (server/, hooks/ intact)
 
-### Phase 1: Command & Control (Days 3-5)
+### Phase 1: Command & Control (Days 3-5) — SHIPPED
 
-- [ ] Command bar with natural language routing
-- [ ] Unit selection + detail panel
-- [ ] Control groups (Ctrl+1-9 to assign, 1-9 to recall)
-- [ ] Session templates (unit types with pre-loaded skills)
-- [ ] Deploy flow: click territory → spawn unit with template
-- [ ] Military-themed sound palette
-- [ ] Unit movement animations between territories
+- [x] Command bar with natural language routing — **SHIPPED** (`CommandBar.ts` + `CommandRouter.ts`)
+- [x] Unit selection + detail panel — **SHIPPED** (`UnitDetail.ts` + `FloatingUnitPanel.ts`)
+- [x] Control groups (Ctrl+1-9 to assign, 1-9 to recall) — **SHIPPED** (`ControlGroupManager.ts`)
+- [ ] Session templates (unit types with pre-loaded skills) — **OPEN** (no unit template system; units are generic sessions)
+- [x] Deploy flow: click territory → spawn unit with template — **PARTIAL** (deploy modal exists but no territory-click spawning)
+- [x] Military-themed sound palette — **SHIPPED** (`SoundManager.ts`: `command_sent`, `unit_deployed`, `threat_spawn`, etc.)
+- [x] Unit movement animations between territories — **SHIPPED** (`MovementManager.ts`: lerp + particle trail)
 
 **Sub-PRDs that spin off:**
 - `prd/cmd-bar-spec.md` — Command parsing, intent routing, autocomplete
 - `prd/unit-templates-spec.md` — Each unit type's skills, prompts, behaviors
 
-### Phase 2: Intelligence (Days 6-8)
+### Phase 2: Intelligence (Days 6-8) — PARTIAL
 
-- [ ] Intel Router (server-side, receives signals from multiple sources)
-- [ ] Supabase realtime subscriptions for business data
-- [ ] Fog of war rendering (per-territory, driven by data freshness)
-- [ ] Threat sprites (enemy units for support tickets, churn, etc.)
-- [ ] Intel panel UI with sortable/filterable feed
-- [ ] Notification system with priority ranking
+- [ ] Intel Router (server-side, receives signals from multiple sources) — **OPEN** (no server/IntelRouter.ts exists)
+- [ ] Supabase realtime subscriptions for business data — **OPEN**
+- [x] Fog of war rendering (per-territory, driven by data freshness) — **SHIPPED** (`FogOfWar.ts`: RenderTexture-based, visibility radius, stale/dark states, regrowth)
+- [x] Threat sprites (enemy units for support tickets, churn, etc.) — **SHIPPED** (`ThreatRenderer.ts`)
+- [x] Intel panel UI with sortable/filterable feed — **SHIPPED** (`IntelPanel.ts`)
+- [ ] Notification system with priority ranking — **OPEN** (ticker in CommandBar, but no priority ranking system)
 
 **Sub-PRDs that spin off:**
 - `prd/intel-sources-spec.md` — Each data source integration (Stripe, Shield, Kit, etc.)
 - `prd/fog-of-war-spec.md` — Fog calculation, reveal mechanics, visual rendering
 
-### Phase 3: Campaign Mode (Days 9-12)
+### Phase 3: Campaign Mode (Days 9-12) — OPEN
 
-- [ ] Campaign data model in Supabase
-- [ ] Campaign creation UI (define objectives, assign territories)
-- [ ] Objective tracking with real metric queries
-- [ ] Score computation and display
-- [ ] Campaign timeline view (progress over days/weeks)
-- [ ] Victory/defeat conditions and celebrations
+- [ ] Campaign data model in Supabase — **OPEN**
+- [ ] Campaign creation UI (define objectives, assign territories) — **OPEN**
+- [ ] Objective tracking with real metric queries — **OPEN** (`ObjectiveRenderer.ts` exists for display but no Supabase backing)
+- [ ] Score computation and display — **PARTIAL** (score placeholder in ResourceBar, no real computation)
+- [ ] Campaign timeline view (progress over days/weeks) — **OPEN**
+- [ ] Victory/defeat conditions and celebrations — **OPEN**
 
 **Sub-PRDs that spin off:**
 - `prd/campaign-engine-spec.md` — Objective types, metric queries, scoring algorithm
 - `prd/celebrations-spec.md` — Victory animations, milestone effects
 
-### Phase 4: Physics & Polish (Days 13-15)
+### Phase 4: Physics & Polish (Days 13-15) — PARTIAL
 
-- [ ] Particle effects (task completion, revenue, errors)
-- [ ] Projectile animations (unit → rally point)
-- [ ] Connection lines (commander → lieutenants)
-- [ ] Territory ambient animations (activity shimmer)
-- [ ] Performance optimization (culling, pooling)
-- [ ] Mobile/tablet responsive layout
+- [x] Particle effects (task completion, revenue, errors) — **SHIPPED** (`ParticleSystem.ts`: 200-particle pool, burst/trail/sparkle)
+- [ ] Projectile animations (unit → rally point) — **OPEN**
+- [x] Connection lines (commander → lieutenants) — **SHIPPED** (`ConnectionLineRenderer.ts`)
+- [ ] Territory ambient animations (activity shimmer) — **OPEN**
+- [ ] Performance optimization (culling, pooling) — **PARTIAL** (particle pool exists, no viewport culling)
+- [ ] Mobile/tablet responsive layout — **OPEN**
 
 **Sub-PRDs that spin off:**
 - `prd/particle-system-spec.md` — Effect types, triggers, performance budget
 - `prd/animation-spec.md` — All movement/transition animations
 
-### Phase 5: Integration (Days 16-20)
+### Phase 5: Integration (Days 16-20) — OPEN
 
-- [ ] Wire to speakeasy-agent's existing Supabase instance
-- [ ] Connect agent-runner scheduled tasks as autonomous patrol units
-- [ ] Slack integration (incoming signals → intel feed)
-- [ ] Google Calendar integration (upcoming events → HUD)
-- [ ] Revenue dashboard with Stripe data
-- [ ] Export campaign reports
+- [ ] Wire to speakeasy-agent's existing Supabase instance — **OPEN**
+- [ ] Connect agent-runner scheduled tasks as autonomous patrol units — **OPEN**
+- [ ] Slack integration (incoming signals → intel feed) — **OPEN**
+- [ ] Google Calendar integration (upcoming events → HUD) — **OPEN**
+- [ ] Revenue dashboard with Stripe data — **OPEN**
+- [ ] Export campaign reports — **OPEN**
 
 **Sub-PRDs that spin off:**
 - `prd/integrations/stripe-spec.md`

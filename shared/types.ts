@@ -167,6 +167,16 @@ export interface ThreatEvent {
   timestamp: number
 }
 
+/** Packet configuration for visual data flow along roads */
+export interface PacketConfig {
+  id: string
+  fromTerritory: string
+  toTerritory: string
+  priority: 'low' | 'normal' | 'high' | 'critical'
+  label?: string
+  createdAt: number
+}
+
 /** Server -> Client messages */
 export type ServerMessage =
   | { type: 'event'; payload: ClaudeEvent }
@@ -183,6 +193,7 @@ export type ServerMessage =
   | { type: 'text_tiles'; payload: TextTile[] }
   | { type: 'objectives'; payload: unknown[] }
   | { type: 'production'; payload: unknown }
+  | { type: 'packet'; payload: PacketConfig }
 
 /** Client -> Server messages */
 export type ClientMessage =

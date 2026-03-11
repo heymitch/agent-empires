@@ -2,6 +2,21 @@
 
 ## Sub-PRD 04 — The Nervous System
 
+> ### Status Summary (2026-03-10)
+>
+> **Assessment:** Nothing from this spec is implemented. No `server/monitors/` directory, no MonitorOrchestrator, no heartbeat system, no freshness dashboard. This is entirely a design spec.
+>
+> - [ ] **MonitorOrchestrator (`server/monitors/orchestrator.ts`)** — directory does not exist
+> - [ ] **Heartbeat monitor** — not implemented
+> - [ ] **Revenue monitor (Stripe polling)** — not implemented (ae_transactions table referenced only in PRD)
+> - [ ] **Content performance monitor** — not implemented
+> - [ ] **Competitor monitor** — not implemented
+> - [ ] **Support monitor (Slack)** — not implemented
+> - [ ] **Intelligence freshness dashboard** — not implemented
+> - [ ] **Automated threat escalation** — not implemented
+> - [ ] **Self-improving loop (pattern analysis)** — not implemented
+> - [ ] **Event bus (monitor_event WebSocket types)** — not implemented
+
 **Parent PRD:** `01-vision.md` (Phase 2: Intelligence, Phase 5: Integration)
 **Dependencies:** `02a-intel-pipeline-spec.md` (Scout/Intel HQ), `02b-enemy-system-spec.md` (Enemy Bestiary)
 **System:** Always-on monitoring agents, event bus, threat escalation, freshness tracking, self-improving loop

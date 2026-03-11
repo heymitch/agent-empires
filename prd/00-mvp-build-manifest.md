@@ -452,18 +452,18 @@ interface TerritoryState {
 
 After today's build, all of these should work:
 
-- [ ] Browser opens showing hex battlefield with 6 named territories
-- [ ] Existing Claude sessions appear as unit sprites in the correct territory
-- [ ] Spawning a new session (Alt+N) shows a unit materializing on the map
-- [ ] Tool calls on a session animate as combat effects on that unit
-- [ ] Unit moves between territories when the session works on different domains
-- [ ] Fog covers unexplored territories, clears around active units
-- [ ] Resource bar shows token usage and unit count
-- [ ] Command bar sends prompts to selected sessions
-- [ ] Minimap shows strategic overview
-- [ ] Napoleon color palette and typography applied throughout
-- [ ] Sound effects play for key events (deploy, combat, complete)
-- [ ] Road stubs visible after repeated skill execution (even if just a trail)
+- [x] Browser opens showing hex battlefield with 6 named territories — **SHIPPED** (`TerrainRenderer.ts`: 7 territories rendered with polygon zones, labels, noise-based terrain texture)
+- [x] Existing Claude sessions appear as unit sprites in the correct territory — **SHIPPED** (`UnitRenderer.ts`: body circle + status ring + nameplate + health bar; `GameState.ts` + `main.ts` wiring)
+- [x] Spawning a new session (Alt+N) shows a unit materializing on the map — **SHIPPED** (new-session modal in `index.html`, wired through `main.ts`)
+- [x] Tool calls on a session animate as combat effects on that unit — **SHIPPED** (`CombatAnimator.ts`: per-tool colors, combo tracking, animated Graphics)
+- [x] Unit moves between territories when the session works on different domains — **SHIPPED** (`MovementManager.ts`: lerp movement over 2s with particle trail)
+- [x] Fog covers unexplored territories, clears around active units — **SHIPPED** (`FogOfWar.ts`: RenderTexture-based, visibility radius, stale/dark thresholds, radar sweep, regrowth). Note: `FogRenderer.ts` is a disabled stub — `FogOfWar.ts` is the real implementation.
+- [x] Resource bar shows token usage and unit count — **SHIPPED** (`ResourceBar.ts`: connection status, revenue, context tokens, unit count, score)
+- [x] Command bar sends prompts to selected sessions — **SHIPPED** (`CommandBar.ts`: session selector, textarea input, ticker notifications)
+- [x] Minimap shows strategic overview — **SHIPPED** (`MinimapRenderer.ts`: 200x150 canvas, territory blobs, unit dots, camera viewport rect, click-to-jump)
+- [ ] Napoleon color palette and typography applied throughout — **OPEN / DIVERGED**: CSS uses cyberpunk palette (Orbitron, neon `#00ffcc`). Terrain uses "Magnetic Residue" dark palette. Neither matches PRD 06 Napoleon parchment/brass spec. Typography is monospace, not serif.
+- [x] Sound effects play for key events (deploy, combat, complete) — **SHIPPED** (`SoundManager.ts`: Web Audio API synthesis, RTS-themed sounds: `command_sent`, `unit_deployed`, `threat_spawn`, etc.)
+- [x] Road stubs visible after repeated skill execution (even if just a trail) — **SHIPPED** (`RoadRenderer.ts`: animated roads between territory centers, 5 road levels with increasing width/glow)
 
 ---
 

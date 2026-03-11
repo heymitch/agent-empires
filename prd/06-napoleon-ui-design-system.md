@@ -1,5 +1,38 @@
 # 06 — Napoleon UI Design System
 
+## Status (as of 2026-03-10)
+
+**Overall: SPEC-ONLY — not yet implemented.**
+
+The current codebase uses a different visual direction:
+
+| PRD 06 Spec | What's Actually Shipped |
+|---|---|
+| Parchment palette (`#F5ECD7`, `#E8D9B5`) | Cyberpunk dark (`#0a0a0f`, `#12121a`, `#1a1a2e`) |
+| Ink text colors (`#1A1408` family) | Light-on-dark (`#e0e0e0`, `#808090`) |
+| Brass/gold accents (`#C9A84C`) | Neon accents (`#00ffcc`, `#7b68ee`, `#ff3366`) |
+| Regiment colors (muted military) | "Magnetic Residue" palette in `TerrainRenderer.ts` (warm dark tones) |
+| Fonts: Playfair Display, EB Garamond, Libre Baskerville | Fonts: Orbitron, JetBrains Mono, Inter |
+| Napoleon parchment/leather textures | No textures (flat dark surfaces) |
+| Night mode (candlelight dimming) | Not implemented |
+| Fog as dark sepia wash | Fog uses dark opacity overlay (`FogOfWar.ts`) — closer to spec than CSS |
+
+**What IS partially aligned:**
+- Fog of war concept (implemented in `FogOfWar.ts`, uses opacity-based approach)
+- Territory colors as regiment identity (implemented, but with different hues)
+- Minimap layout and behavior (implemented in `MinimapRenderer.ts`)
+- Sound synthesis approach (Web Audio API, no files — matches Section 4 intent)
+
+**Asset checklist status:**
+- Fonts: Google Fonts listed but NOT loaded (different fonts in use)
+- SVG Icons: 0 of ~43 icons created
+- Textures: 0 of 4 textures created
+- Sounds: Synthesized via Web Audio API (matches spec intent, different timbres)
+
+**Decision needed:** Adopt Napoleon palette as planned, or formalize the current dark "Magnetic Residue" direction as the new design system.
+
+---
+
 ## The War Room Aesthetic
 
 Every pixel of Agent Empires should feel like Napoleon's command tent the night before Austerlitz. Hand-inked maps on parchment. Brass figurines marking unit positions. Wax-sealed dispatches arriving by courier. A field desk with quill and ink. Candlelight casting warm shadows across strategic documents. This is not a tech dashboard — it is a war room that happens to display real-time business data.

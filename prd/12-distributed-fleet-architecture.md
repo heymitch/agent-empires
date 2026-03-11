@@ -9,6 +9,31 @@
 
 ---
 
+> ### STATUS SUMMARY (Audit 2026-03-10)
+>
+> **Overall: NOT STARTED — pure spec, zero implementation**
+>
+> | Component | PRD Spec | Code Reality |
+> |-----------|----------|--------------|
+> | **Unit persistence tiers (Operative/Officer/Commander)** | Three tiers with different lifespans, autonomy, restart behavior | No tier system. All units are equal — `UnitRenderer` has no persistence tier field. `addUnit()` takes id, name, territory only |
+> | **Multi-machine topology** | Hub (local) + Outpost (remote) + Forward Base (cloud) pattern | Server is single-machine only. `server/index.ts` runs one Express server, one WebSocket. No remote connection handling, no outpost registration, no fleet discovery |
+> | **Heartbeat protocol** | Units send periodic heartbeats; missing heartbeats trigger MIA → KIA status progression | No heartbeat system. Session status comes from hook events only. No timeout-based death detection |
+> | **RTS command mapping** | Deploy, Reinforce, Recall, Rotate, Promote, Decommission commands | No command system. Units are created/removed via `addUnit()`/`removeUnit()` in response to hook events — no user-initiated commands |
+> | **Attention scaling** | Officer/Operative autonomy tiers, escalation rules, attention budget per unit | Does not exist |
+> | **Remote agent rendering** | Remote units render at national zoom tier with connection quality indicators | PRD 11 (geographic zoom) is also not implemented, so this has no foundation |
+> | **Fleet dashboard** | Central fleet view showing all machines, connection status, unit distribution | Does not exist |
+>
+> **What exists that PRD 12 can build on:**
+> - `SupabasePersistence.ts` already persists sessions to `ae_sessions` table — could be extended with persistence tier, heartbeat timestamps
+> - `server/index.ts` WebSocket infrastructure could accept remote connections if auth/routing were added
+> - Hook-based event ingestion already captures session lifecycle — heartbeat could layer on top
+>
+> **Blocking dependencies:** PRD 07 (remote forces transport) for multi-machine. PRD 11 (geographic zoom) for remote unit rendering at national tier. Neither is implemented.
+>
+> **Priority assessment:** Phase 5+ — this is far-horizon architecture. Current single-machine setup works for the immediate use case. Build PRDs 11 and 13 first.
+
+---
+
 ## Table of Contents
 
 1. [Vision](#1-vision)

@@ -1825,6 +1825,62 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
     return
   }
 
+  // POST /packets — spawn a visual packet on a road
+  if (req.method === 'POST' && req.url === '/packets') {
+    let body = ''
+    req.on('data', (chunk: Buffer) => { body += chunk.toString() })
+    req.on('end', () => {
+      try {
+        const { from, to, priority, label } = JSON.parse(body)
+        if (!from || !to) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Missing from/to' }))
+          return
+        }
+        const packet = {
+          id: randomUUID(),
+          fromTerritory: from,
+          toTerritory: to,
+          priority: priority || 'normal',
+          label: label || undefined,
+          createdAt: Date.now(),
+        }
+        broadcast({ type: 'packet', payload: packet } as any)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, packet }))
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+      }
+    })
+    return
+  }
+
+  // GET /packets/test — spawn 5 test packets on various roads
+  if (req.method === 'GET' && req.url === '/packets/test') {
+    const testPackets = [
+      { from: 'hq', to: 'fulfillment', priority: 'critical', label: 'deploy' },
+      { from: 'lead-gen', to: 'sales', priority: 'high', label: 'handoff' },
+      { from: 'sales', to: 'fulfillment', priority: 'normal', label: 'ticket' },
+      { from: 'fulfillment', to: 'support', priority: 'low', label: 'docs' },
+      { from: 'hq', to: 'lead-gen', priority: 'high', label: 'campaign' },
+    ]
+    for (const tp of testPackets) {
+      const packet = {
+        id: randomUUID(),
+        fromTerritory: tp.from,
+        toTerritory: tp.to,
+        priority: tp.priority,
+        label: tp.label,
+        createdAt: Date.now(),
+      }
+      broadcast({ type: 'packet', payload: packet } as any)
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, count: testPackets.length }))
+    return
+  }
+
   // Config (username, etc)
   if (req.method === 'GET' && req.url === '/config') {
     const username = process.env.USER || process.env.USERNAME || 'claude-user'

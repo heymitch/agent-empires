@@ -2,6 +2,25 @@
 
 ## PRD 02: How Things Move, Fight, and Build
 
+> ### Status Summary (2026-03-10)
+>
+> **Assessment:** Core movement, terrain, fog, roads, combat animations, and resource bar are all shipped. Hex pathfinding (A*) and formation system are not yet implemented.
+>
+> - [x] **World geometry / territories** — `src/renderer/TerrainRenderer.ts`, `src/renderer/TerritoryRenderer.ts`
+> - [x] **Unit rendering & positioning** — `src/renderer/UnitRenderer.ts`
+> - [x] **Movement system** — `src/game/MovementManager.ts`
+> - [x] **Fog of war** — `src/renderer/FogOfWar.ts`, `src/renderer/FogRenderer.ts`
+> - [x] **Road rendering (tiered)** — `src/renderer/RoadRenderer.ts`, `server/RoadAggregator.ts`
+> - [x] **Combat animations (tool calls)** — `src/game/CombatAnimator.ts`
+> - [x] **Resource bar (tokens, units, score)** — `src/hud/ResourceBar.ts`
+> - [x] **Minimap** — `src/renderer/MinimapRenderer.ts`
+> - [x] **Particle system** — `src/renderer/ParticleSystem.ts`
+> - [x] **Screen effects** — `src/renderer/ScreenEffects.ts`
+> - [x] **Territory detection** — `server/TerritoryDetector.ts`
+> - [ ] **Hex pathfinding (A*)** — no A*/pathfinding implementation found in src
+> - [ ] **Formations / control groups** — `02f-formation-spec.md` still TODO
+> - [ ] **Sound design** — `02e-sound-design-spec.md` still TODO (audio infra exists in `src/audio/` but no terrain/combat sounds)
+
 **Depends on:** `01-vision.md`
 **Sub-specs:** `02a-intel-pipeline-spec.md`, `02b-enemy-system-spec.md`, `02c-combat-and-roads-spec.md`
 

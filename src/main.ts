@@ -53,6 +53,7 @@ import { KeyboardManager } from './input/KeyboardManager'
 import { ControlGroupManager } from './input/ControlGroupManager'
 import { CommandRouter } from './input/CommandRouter'
 import { RoadRenderer } from './renderer/RoadRenderer'
+import { PacketManager, type PacketConfig } from './renderer/PacketSprite'
 import { ObjectiveRenderer, type ObjectiveData } from './renderer/ObjectiveRenderer'
 import { ProductionChainRenderer, type ProductionChainData } from './renderer/ProductionChainRenderer'
 import { AbilityBar } from './hud/AbilityBar'
@@ -113,6 +114,7 @@ let threatRenderer: ThreatRenderer
 let screenEffects: ScreenEffects
 let connectionLineRenderer: ConnectionLineRenderer
 let roadRenderer: RoadRenderer
+let packetManager: PacketManager
 let objectiveRenderer: ObjectiveRenderer
 let keyboardManager: KeyboardManager
 let controlGroupManager: ControlGroupManager
@@ -193,6 +195,12 @@ async function init() {
     (territory) => battlefield.terrainRenderer.getTerritoryCenter(territory as TerritoryId)
   )
 
+  // PacketManager: animated data packets traveling along roads (drawn above road dots)
+  packetManager = new PacketManager(
+    battlefield.roadLayer,
+    (territory) => battlefield.terrainRenderer.getTerritoryCenter(territory as TerritoryId)
+  )
+
   // ObjectiveRenderer: boss buildings on the battlefield
   objectiveRenderer = new ObjectiveRenderer(
     battlefield.roadLayer,  // share road layer (drawn below units, above terrain)
@@ -230,6 +238,9 @@ async function init() {
 
     // Update road animations (marching dots)
     roadRenderer.update(dt)
+
+    // Update packet animations (data flow along roads)
+    packetManager.update(dt)
 
     // Update objective animations (pulses, defeat particles)
     objectiveRenderer.update(dt)
@@ -697,6 +708,10 @@ function setupEventClient() {
       threatRenderer.removeThreat(id)
     } else if ((msg as any).type === 'roads') {
       roadRenderer.updateRoads((msg as any).payload)
+      packetManager.updateRoads((msg as any).payload)
+    } else if ((msg as any).type === 'packet') {
+      const pktConfig = (msg as any).payload as PacketConfig
+      packetManager.spawnPacket(pktConfig)
     } else if ((msg as any).type === 'objectives') {
       objectiveRenderer.updateObjectives((msg as any).payload as ObjectiveData[])
     } else if ((msg as any).type === 'production') {

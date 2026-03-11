@@ -2,6 +2,23 @@
 
 ## PRD 03: How Agents Appear, Move, and Act on the Battlefield
 
+> ### Status Summary (2026-03-10)
+>
+> **Assessment:** Session tracking, unit rendering, sub-agent spawning, territory detection, and the event-to-animation pipeline are all shipped. Commander/prime session distinction exists but is not formalized per spec.
+>
+> - [x] **Session tracking (tmux management)** — `server/index.ts` (ManagedSession, tmux send/validate)
+> - [x] **UnitRenderer (agent sprites on map)** — `src/renderer/UnitRenderer.ts`
+> - [x] **SubagentManager (Task tool spawn visualization)** — `src/entities/SubagentManager.ts`
+> - [x] **Territory detection (file-path-to-territory mapping)** — `server/TerritoryDetector.ts`
+> - [x] **Movement between territories** — `src/game/MovementManager.ts`
+> - [x] **CombatAnimator (tool-use animations)** — `src/game/CombatAnimator.ts`
+> - [x] **Connection line renderer** — `src/renderer/ConnectionLineRenderer.ts`
+> - [ ] **Prime/Commander session formal designation (PrimeSessionResolver)** — partial (SkillRegistry references commander but no formal resolver)
+> - [ ] **Unit status lifecycle (idle/working/combat/exhausted/dead)** — not fully implemented per spec
+> - [ ] **Context exhaustion / unit collapse animation** — not implemented
+> - [ ] **Loot orb return from sub-agents** — not implemented
+> - [ ] **Deploy animation with portal circle** — not implemented
+
 **Depends on:** `01-vision.md`, `02-physics-and-movement.md`
 **Parent phase:** Phase 0 (Foundation) + Phase 1 (Command & Control)
 **Last updated:** 2026-03-10

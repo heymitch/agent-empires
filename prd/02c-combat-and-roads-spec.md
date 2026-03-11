@@ -2,6 +2,22 @@
 
 ## Technical Design Document — Agent Empires v0.1
 
+> ### Status Summary (2026-03-10)
+>
+> **Assessment:** Core combat animations and road rendering are shipped. Road tiering (execution count upgrades) is implemented. Combo system, sustained-tool animations, and full sound synthesis are not yet wired.
+>
+> - [x] **CombatAnimator (tool-call-to-animation mapping)** — `src/game/CombatAnimator.ts`
+> - [x] **RoadRenderer (tiered road visuals, marching ants)** — `src/renderer/RoadRenderer.ts`
+> - [x] **RoadAggregator (server-side execution counting)** — `server/RoadAggregator.ts`
+> - [x] **ParticleSystem (burst/trail effects)** — `src/renderer/ParticleSystem.ts`
+> - [x] **ScreenEffects (shake/flash)** — `src/renderer/ScreenEffects.ts`
+> - [x] **Sound infrastructure** — `src/audio/SoundManager.ts`, `src/audio/SpatialAudioContext.ts`
+> - [ ] **Combo counter / escalation system** — not found in codebase
+> - [ ] **Sustained-tool animations (Write streaming, Bash long-running)** — not implemented
+> - [ ] **Per-tool sound synthesis (Tone.js frequency table)** — SoundManager exists but full frequency table from spec not wired
+> - [ ] **Road tier-up ceremony animations** — not implemented
+> - [ ] **Territory-specific road colors** — not verified
+
 **Depends on:** `01-vision.md` (core metaphor, PixiJS renderer, event system)
 **Feeds into:** Phase 1 (unit movement), Phase 4 (particle effects, physics layer)
 

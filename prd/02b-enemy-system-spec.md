@@ -2,6 +2,21 @@
 
 ## v0.1 — The Bestiary
 
+> ### Status Summary (2026-03-10)
+>
+> **Assessment:** ThreatRenderer ships enemy visualization with spawn/exit animations. Server-side threat bridge exists. The full bestiary (7 threat classes, behavior state machines, pack AI, boss encounters, spawn-from-webhooks) is unimplemented.
+>
+> - [x] **ThreatRenderer (enemy sprites, spawn/exit anims)** — `src/renderer/ThreatRenderer.ts`
+> - [x] **ThreatDataBridge (server-side threat data)** — `server/ThreatDataBridge.ts`
+> - [ ] **Enemy taxonomy (7 threat classes)** — no class/color differentiation in renderer
+> - [ ] **Behavior state machines (DRIFT, SIEGE, PATROL, etc.)** — not implemented
+> - [ ] **Spawn from real data sources (Stripe webhooks, Supabase polls)** — no `spawnEnemy` in server
+> - [ ] **Pack behavior / formation AI** — not implemented
+> - [ ] **Boss encounters (Churn Wave, Competitor Blitz, etc.)** — not implemented
+> - [ ] **Combat resolution (unit vs enemy engagement)** — not implemented
+> - [ ] **Medal / loot system** — not implemented
+> - [ ] **Sound design for enemies** — not implemented
+
 **Parent PRD:** `01-vision.md`
 **System:** Enemy Spawner, Combat Resolution, Threat Intelligence
 **Dependencies:** Intel Router, Territory Renderer, Supabase Realtime

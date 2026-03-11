@@ -2,6 +2,21 @@
 
 ## Sub-PRD 02a — Reconnaissance & Intelligence System
 
+> ### Status Summary (2026-03-10)
+>
+> **Assessment:** Server-side intel bridge is shipped. The full scout deployment UI, Intel HQ sub-agent pipeline, and file-watcher flow are unimplemented — this is still a design spec.
+>
+> - [x] **ThreatDataBridge (server-side intel routing)** — `server/ThreatDataBridge.ts`
+> - [x] **IntelPanel (HUD display)** — `src/hud/IntelPanel.ts`
+> - [ ] **Scout deployment UI (Deploy Modal)** — not found in `src/ui/`
+> - [ ] **tmux-based scout sessions** — tmux infra exists in `server/index.ts` but no scout-specific templates
+> - [ ] **Raw intel file format / disk writes** — no `~/.agent-empires/data/intel/` handling found
+> - [ ] **File watcher (chokidar) on raw intel** — not implemented
+> - [ ] **Intel HQ sub-agent (analysis/correlation)** — not implemented
+> - [ ] **Intel products as map objects** — not implemented
+> - [ ] **Counter-intelligence system** — not implemented
+> - [ ] **Scout fuel / mission types** — not implemented
+
 **Parent:** `prd/01-vision.md` (Phase 2: Intelligence)
 **Status:** Design spec
 **Last updated:** 2026-03-10

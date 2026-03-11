@@ -9,6 +9,46 @@
 
 ---
 
+> ### STATUS SUMMARY (Audit 2026-03-10)
+>
+> **Overall: PARTIAL — strong foundation exists, critical visualization gaps remain**
+>
+> | Component | PRD Spec | Code Reality | Status |
+> |-----------|----------|--------------|--------|
+> | **Roads between territories** | Factorio-style belts carrying ticket packets between units | `RoadRenderer.ts` draws animated bezier curves between territory centers with 5 road levels (Trail-Superhighway), marching dots at level 3+, glow at level 4+, hover tooltips. Fully functional. | BUILT |
+> | **RoadAggregator (data pipeline)** | Aggregate territory transitions from events into road data | `server/RoadAggregator.ts` polls `ae_events`, counts territory transitions per session, computes road levels (thresholds: 5/15/30/60), upserts to `ae_roads`. Working pipeline. | BUILT |
+> | **Production chain definitions** | Per-territory Factorio node graphs with metrics, targets, data sources | `shared/productionChains.ts` defines 5 chains (Lead-Gen, Sales, Fulfillment, Support, Retention) with typed nodes, data sources, targets, position layout. Complete. | BUILT |
+> | **ProductionChainRenderer** | Factorio-view overlay with nodes, pipes, flow particles, bottleneck detection | `src/renderer/ProductionChainRenderer.ts` — full PixiJS renderer with node boxes, health coloring, bezier pipe connections, flow dot animation, bottleneck pulse glow, pileup particles. Fade in/out. | BUILT |
+> | **ProductionDataManager** | Server-side manager feeding real metric data to production chains | `server/ProductionDataManager.ts` exists | BUILT |
+> | **`ae_handoffs` table** | Supabase table for mission handoff records (supply chain packets) | `SupabasePersistence.logHandoff()` writes to `ae_handoffs` with from/to session, territory, packet type, summary, priority. Table schema differs slightly from PRD (uses session_id + territory instead of agent name). | PARTIAL |
+> | **PacketSprite (ticket-as-visible-packet)** | Individual ticket packets rendered as glowing priority-colored dots traveling roads | **DOES NOT EXIST.** `RoadRenderer` draws generic marching dots along roads (uniform cream/amber/orange by road level), but these are decorative — they don't represent individual handoffs or tickets. No `SupplyPacket` interface, no priority-based color/size/speed, no per-packet hover tooltip. | **NOT BUILT — HIGH PRIORITY** |
+> | **Queue visualization (packet stacking)** | Packets pile up at destination when unit is busy, triggering amber warnings | **DOES NOT EXIST.** `ProductionChainRenderer` has a bottleneck pileup effect (random dots at pipe endpoint), but it's purely visual — not driven by actual queue depth from handoff data. | **NOT BUILT — HIGH PRIORITY** |
+> | **Supabase Realtime subscription for handoffs** | Subscribe to `ae_handoffs` INSERTs to spawn live packet sprites | **DOES NOT EXIST.** Roads update via polling (`RoadAggregator` on 60s interval), not realtime. No `spawnPacketOnRoad()` function. | **NOT BUILT — HIGH PRIORITY** |
+> | **Downstream consumer / waste detection** | Flag units with no consumers, dead roads, high rejection rates | **DOES NOT EXIST.** No `WasteDetector`, no `ae_waste_flags` table, no waste dashboard. | NOT BUILT |
+> | **Unit inspection panel (full version)** | Loadout, handoff map, goal chain, memory state, queue, supply line, kill log | Basic unit detail panel exists (PRD 01). None of the PRD 13 extensions (goal chain, queue, supply line, kill log) are implemented. | NOT BUILT |
+> | **Throughput metrics per road** | `RoadMetrics` interface with packets/hour, avg transit, queue depth | `RoadData` interface only has `packetCount`, `roadLevel`, `lastPacketAt`. No per-hour rates, no transit times, no queue depth tracking. | NOT BUILT |
+> | **Paperclip integration** | Shared Supabase tables for tickets, budgets, goals, audit log | `ae_tickets`, `ae_budgets`, `ae_goals`, `ae_audit_log` tables — **none exist in Supabase**. Only `ae_handoffs` exists (partial schema). | NOT BUILT |
+>
+> ### HIGH PRIORITY EXECUTION TARGETS
+>
+> These are the items that would create the most visible upgrade to the war room with the least new infrastructure:
+>
+> 1. **PacketSprite system** — Replace generic marching dots with data-driven packet sprites. Each `ae_handoffs` INSERT spawns a visible packet with priority color/size. Requires: new `PacketSprite` class in `src/renderer/`, Supabase Realtime subscription in client, modify `RoadRenderer` to accept packet data alongside static road drawing.
+>
+> 2. **Handoff-driven queue stacking** — When packets arrive at a unit faster than consumption, visually stack them. Requires: query `ae_handoffs WHERE status='pending' AND to_territory=X`, render stacked dots at road endpoint, color-shift road when queue > 7.
+>
+> 3. **Supabase Realtime for ae_handoffs** — Subscribe client-side to handoff INSERTs/UPDATEs. Spawn packets on INSERT, absorb on UPDATE to 'completed'. This makes the supply chain live instead of poll-based.
+>
+> 4. **Road throughput metrics** — Extend `RoadAggregator` to compute packets/hour, avg transit time, queue depth. Extend `RoadData` interface. Feed into road tooltip (which already exists in `RoadRenderer`).
+>
+> **What's solid and shouldn't be touched:**
+> - `RoadRenderer.ts` — clean, well-structured, extends naturally for packet sprites
+> - `RoadAggregator.ts` — working pipeline, just needs richer metrics
+> - `ProductionChainRenderer.ts` — Factorio view works, bottleneck detection works
+> - `shared/productionChains.ts` — complete chain definitions for all territories
+
+---
+
 ## Table of Contents
 
 1. [The Core Relationship](#1-the-core-relationship)
