@@ -8,7 +8,7 @@
 import { Application, Container, Graphics } from 'pixi.js'
 import { TerrainRenderer, type TerritoryId } from './TerrainRenderer'
 import { UnitRenderer, type UnitStatus } from './UnitRenderer'
-import { FogRenderer } from './FogRenderer'
+import { FogOfWar } from './FogOfWar'
 import { MinimapRenderer } from './MinimapRenderer'
 import { ParticleSystem } from './ParticleSystem'
 import { WORLD_WIDTH, WORLD_HEIGHT, ISO_TILT } from './constants'
@@ -43,7 +43,7 @@ export class BattlefieldRenderer {
 
   // Sub-renderers
   terrainRenderer!: TerrainRenderer
-  fogRenderer!: FogRenderer
+  fogOfWar!: FogOfWar
   minimapRenderer!: MinimapRenderer
   particleSystem!: ParticleSystem
 
@@ -113,7 +113,8 @@ export class BattlefieldRenderer {
     // Initialize sub-renderers
     this.terrainRenderer = new TerrainRenderer(this.app, this.territoryLayer)
 
-    this.fogRenderer = new FogRenderer(this.fogLayer, WORLD_WIDTH, WORLD_HEIGHT)
+    this.fogOfWar = new FogOfWar(this.app)
+    this.fogOfWar.init(this.fogLayer, WORLD_WIDTH, WORLD_HEIGHT)
 
     this.particleSystem = new ParticleSystem(this.effectsLayer)
 
@@ -253,7 +254,7 @@ export class BattlefieldRenderer {
       x: u.worldX,
       y: u.worldY,
     }))
-    this.fogRenderer.update(unitPositions)
+    this.fogOfWar.update(unitPositions, new Map())
 
     // Update terrain (animated flow lines, pulsing borders)
     this.terrainRenderer.draw(this.app.ticker.deltaMS / 1000)

@@ -4,7 +4,6 @@ import {
   Graphics,
   RenderTexture,
   Sprite,
-  ColorMatrixFilter,
 } from 'pixi.js';
 
 // World dimensions — mirrors constants.ts defaults; override via init()
@@ -243,39 +242,43 @@ export class FogOfWar {
     const g = this.fogGraphics!;
     g.clear();
 
-    // Start: dark base covering the whole world
-    g.rect(0, 0, this.worldW, this.worldH).fill({ color: 0x000000, alpha: DARK_OPACITY });
+    // ── Strategy: draw dark base, then .cut() circles at unit positions ──
+    // PixiJS v8 Graphics .cut() punches transparent holes in all previous
+    // geometry on the same Graphics object — this is the correct way to
+    // create "erase" regions without blend-mode hacks.
 
-    // Override per-bucket with computed opacity (lighter areas)
-    for (const record of this.areaRecords.values()) {
-      const [cx, cy] = this._bucketCenter(record.key);
-      const bucketSize = this.GRID_SIZE;
+    // Step 1: Draw per-bucket fog rects at their computed opacity.
+    // We tile the world in buckets. Buckets with area records use their
+    // computed opacity; unknown regions get full darkness.
+    const cols = Math.ceil(this.worldW / this.GRID_SIZE);
+    const rows = Math.ceil(this.worldH / this.GRID_SIZE);
 
-      if (record.currentOpacity < DARK_OPACITY) {
-        // Draw a lighter rectangle over this bucket — cut into the base darkness
-        // We punch the right opacity. Since we started at DARK_OPACITY, we need to
-        // "lighten" by drawing a transparent rect, but RenderTexture compositing
-        // doesn't support true erase easily without blendMode tricks.
-        // Strategy: clear this bucket then fill at the lower opacity.
-        const x = cx - bucketSize / 2;
-        const y = cy - bucketSize / 2;
-        g.rect(x, y, bucketSize, bucketSize).fill({
-          color: 0x000000,
-          alpha: record.currentOpacity,
-        });
+    for (let bx = 0; bx < cols; bx++) {
+      for (let by = 0; by < rows; by++) {
+        const key = `${bx}:${by}`;
+        const record = this.areaRecords.get(key);
+        const opacity = record ? record.currentOpacity : DARK_OPACITY;
+
+        if (opacity > 0.01) {
+          const x = bx * this.GRID_SIZE;
+          const y = by * this.GRID_SIZE;
+          g.rect(x, y, this.GRID_SIZE, this.GRID_SIZE)
+            .fill({ color: 0x000000, alpha: opacity });
+        }
       }
     }
 
-    // Clear circles at unit positions (fully transparent)
+    // Step 2: Cut clear circles at unit positions using .cut()
+    // .cut() removes the shape from all previously drawn geometry
     for (const pos of unitPositions) {
-      // PixiJS v8: draw a circle, then cut it out from the filled area.
-      // We achieve "erase" by drawing white circles at alpha=0 effectively.
-      // Best approach in v8: draw white circle with a low alpha to "lighten."
-      // True erase: use Graphics .cut() after a shape to punch holes.
-      g.circle(pos.x, pos.y, VISIBILITY_RADIUS).fill({ color: 0x000000, alpha: 0 });
+      g.circle(pos.x, pos.y, VISIBILITY_RADIUS).cut();
     }
 
-    // Radar sweep arcs
+    // Step 3: Radar sweep arcs (drawn as additive green rings — on top of fog)
+    // These are separate Graphics since they should render ON TOP of the fog,
+    // not get cut. We draw them into a separate pass.
+    // For simplicity, draw them into the same graphics — they'll appear
+    // over the fogged areas which is the desired effect.
     for (const sweep of this.radarSweeps) {
       const elapsed = now - sweep.startTime;
       const t = elapsed / RADAR_SWEEP_MS; // 0..1
@@ -290,7 +293,6 @@ export class FogOfWar {
     }
 
     // Render the scratch graphics into the fog RenderTexture
-    // The "clear" below wipes the texture before re-compositing.
     this.app.renderer.render({
       container: g,
       target: this.fogTexture!,
