@@ -721,11 +721,20 @@ function handleSessionList(sessionList: ManagedSession[]) {
   const currentIds = new Set(sessions.keys())
   const newIds = new Set(sessionList.map(s => s.id))
 
-  // Remove old sessions
+  // Remove old sessions — trigger shrink animation, then clean up
   for (const id of currentIds) {
     if (!newIds.has(id)) {
-      battlefield.removeUnit(id)
-      gameState.removeUnit(id)
+      const unit = battlefield.getUnit(id)
+      if (unit && !unit.isRetiring) {
+        unit.retire()
+        // Remove after animation completes
+        setTimeout(() => {
+          battlefield.removeUnit(id)
+          gameState.removeUnit(id)
+        }, 600)
+      } else if (!unit) {
+        gameState.removeUnit(id)
+      }
       sessions.delete(id)
     }
   }

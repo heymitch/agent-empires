@@ -2468,6 +2468,98 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
     return
   }
 
+  // POST /objectives/from-scratchpad — parse a markdown file for unchecked tasks → boss objectives
+  if (req.method === 'POST' && req.url === '/objectives/from-scratchpad') {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized' }))
+      return
+    }
+    collectRequestBody(req).then(async body => {
+      try {
+        const { filePath, territory, campaign } = JSON.parse(body) as {
+          filePath?: string
+          territory?: string
+          campaign?: string
+        }
+
+        // Default to the speakeasy-agent Scratchpad
+        const targetPath = filePath || resolve(process.env.HOME || '~', 'speakeasy-agent/Scratchpad.md')
+        let content: string
+        try {
+          content = readFileSync(targetPath, 'utf-8')
+        } catch {
+          res.writeHead(404, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: `File not found: ${targetPath}` }))
+          return
+        }
+
+        // Parse unchecked tasks: lines matching "- [ ] **text**" or "- [ ] text"
+        const lines = content.split('\n')
+        const tasks: Array<{ name: string; section: string }> = []
+        let currentSection = 'General'
+
+        for (const line of lines) {
+          // Track section headings
+          const headingMatch = line.match(/^#{1,3}\s+(.+)/)
+          if (headingMatch) currentSection = headingMatch[1].trim()
+
+          // Match unchecked tasks
+          const taskMatch = line.match(/^[-*]\s+\[ \]\s+\*\*(.+?)\*\*(.*)$/) ||
+                           line.match(/^[-*]\s+\[ \]\s+(.+)$/)
+          if (taskMatch) {
+            const name = taskMatch[1].replace(/\*\*/g, '').trim()
+            if (name.length > 3 && name !== 'STOP') {
+              tasks.push({ name, section: currentSection })
+            }
+          }
+        }
+
+        if (tasks.length === 0) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, created: 0, message: 'No unchecked tasks found' }))
+          return
+        }
+
+        // Map sections to territories heuristically
+        const sectionToTerritory = (section: string): string => {
+          const s = section.toLowerCase()
+          if (s.includes('lead') || s.includes('marketing') || s.includes('content')) return 'lead-gen'
+          if (s.includes('sales') || s.includes('pipeline') || s.includes('checkout')) return 'sales'
+          if (s.includes('fulfillment') || s.includes('deliver') || s.includes('bootcamp') || s.includes('product')) return 'fulfillment'
+          if (s.includes('support') || s.includes('ticket')) return 'support'
+          if (s.includes('retention') || s.includes('churn')) return 'retention'
+          return territory || 'hq'
+        }
+
+        const created: unknown[] = []
+        for (const task of tasks) {
+          const obj = await objectiveManager!.createObjective({
+            name: task.name,
+            territory: sectionToTerritory(task.section),
+            hp_total: Math.max(1, Math.ceil(task.name.length / 15)), // rough sizing: longer names = bigger tasks
+            campaign_id: campaign || undefined,
+            priority: 3,
+            metadata: { source: 'scratchpad', section: task.section, filePath: targetPath },
+          })
+          if (obj) {
+            created.push(obj)
+            log(`[Objectives/Scratchpad] Created: "${obj.name}" in ${obj.territory} (HP: ${obj.hp_total})`)
+          }
+        }
+
+        log(`[Objectives/Scratchpad] Parsed ${tasks.length} tasks, created ${created.length} objectives from ${targetPath}`)
+        res.writeHead(201, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, parsed: tasks.length, created: created.length, objectives: created }))
+      } catch (err) {
+        log(`[Objectives/Scratchpad] Error: ${err}`)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: String(err) }))
+      }
+    })
+    return
+  }
+
   // Objective-specific endpoints: /objectives/:id/(hp|status|assign)
   const objectiveActionMatch = req.url?.match(/^\/objectives\/([a-f0-9-]+)\/(hp|status|assign)$/)
   if (objectiveActionMatch && objectiveManager) {

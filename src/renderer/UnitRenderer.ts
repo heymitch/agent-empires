@@ -65,6 +65,9 @@ export class UnitRenderer {
   // Animation state
   private pulsePhase = 0
   private pulseSpeed = 1.5
+  private _retiring = false
+  private _retireElapsed = 0
+  private _retireDuration = 0.5 // 500ms shrink-to-zero
 
   constructor(id: string, name: string, territory: TerritoryId = 'hq', unitClass: UnitClass = 'command') {
     this.id = id
@@ -307,6 +310,17 @@ export class UnitRenderer {
   }
 
   update(dt: number): void {
+    // Shrink-to-zero retirement animation
+    if (this._retiring) {
+      this._retireElapsed += dt
+      const t = Math.min(1, this._retireElapsed / this._retireDuration)
+      // Ease-in: accelerates into the shrink
+      const scale = 1 - t * t
+      this.container.scale.set(scale)
+      this.container.alpha = scale
+      return // skip all other animations during retirement
+    }
+
     // Pulse animation
     this.pulsePhase += dt * this.pulseSpeed * Math.PI * 2
     if (this.pulsePhase > Math.PI * 2) this.pulsePhase -= Math.PI * 2
@@ -328,6 +342,20 @@ export class UnitRenderer {
     } else {
       this.container.alpha = 1.0
     }
+  }
+
+  /** Start shrink-to-zero retirement animation. Returns true when complete. */
+  retire(): void {
+    this._retiring = true
+    this._retireElapsed = 0
+  }
+
+  get isRetiring(): boolean {
+    return this._retiring
+  }
+
+  get retireComplete(): boolean {
+    return this._retiring && this._retireElapsed >= this._retireDuration
   }
 
   destroy(): void {
