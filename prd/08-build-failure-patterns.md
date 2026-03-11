@@ -299,6 +299,60 @@ done
 
 ---
 
+## Failure Pattern 13: IPv6 localhost Resolution (macOS)
+
+**What happened:** `fetch('http://localhost:4003/...')` failed intermittently on macOS. Node resolved `localhost` to `::1` (IPv6) while the server only bound to `0.0.0.0` (IPv4). Connection refused.
+
+**Root cause:** macOS resolves `localhost` to IPv6 first. If the server doesn't explicitly listen on IPv6, connections fail silently or intermittently.
+
+**Rule for sub-agents:**
+> Always use `127.0.0.1` instead of `localhost` in URLs. This forces IPv4 and eliminates DNS resolution ambiguity.
+
+```typescript
+// BAD
+const url = 'http://localhost:4003/api'
+
+// GOOD
+const url = 'http://127.0.0.1:4003/api'
+```
+
+---
+
+## Failure Pattern 14: Sub-Agents Not Visible on Battlefield
+
+**What happened:** Claude Code's `Agent` tool spawns sub-processes that share the parent's session ID. The server saw events from one session, not multiple. Sub-agents were invisible on the map.
+
+**Root cause:** Unlike `tmux` sessions which get unique IDs, `Agent` tool sub-agents are internal to Claude Code and don't create separate event streams.
+
+**Fix:** Virtual sub-agent spawning — intercept `pre_tool_use` for `Agent` tool, create a temporary `ManagedSession` with a synthetic ID (`${sessionId}-sub-${toolUseId}`), mark it as a child of the parent. On `post_tool_use`, retire the virtual unit after 30s.
+
+**Rule for sub-agents:**
+> When tracking agent spawning, don't assume every agent creates a unique session. Check how the tool actually works. The `Agent` tool reuses the parent session — you must synthesize visibility from tool events.
+
+---
+
+## Failure Pattern 15: Unreadable Labels at Default Zoom
+
+**What happened:** Territory labels were set to 12px font size. At normal map zoom (0.3-0.5x), labels were invisible. User reported "I can't see them at all."
+
+**Root cause:** Labels were designed for 1:1 zoom but the map renders at strategic zoom-out by default.
+
+**Rule for sub-agents:**
+> Design all text at the EXPECTED zoom level, not 1:1. Territory labels at 48px bold with 0.35 alpha look right at strategic zoom. Unit labels use counter-scaling (`setZoomScale`) to maintain readability. Always ask: "What zoom will users see this at?"
+
+---
+
+## Failure Pattern 16: Dead Code from Sub-Agent Builds
+
+**What happened:** FogOfWar.ts (338 lines) was built by a sub-agent but never wired into BattlefieldRenderer. It sat as dead code — compiles fine, does nothing at runtime.
+
+**Root cause:** Sub-agent built the component correctly but the integration step (wiring into main.ts/BattlefieldRenderer) was a separate task that got missed.
+
+**Rule for sub-agents:**
+> When building a new renderer/manager, ALSO wire it into the init chain. At minimum, add the import + instantiation. If you can't modify main.ts (file ownership conflict), FLAG IT: "Built FogOfWar.ts — NOT WIRED. Parent must add to BattlefieldRenderer init."
+
+---
+
 ## Integration into Orchestrator
 
 Add to the agentic build orchestrator as **Law 8**:
