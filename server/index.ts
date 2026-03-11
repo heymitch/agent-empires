@@ -33,6 +33,8 @@ import type {
   TextTile,
   CreateTextTileRequest,
   UpdateTextTileRequest,
+  FleetMessage,
+  FleetRegisterMessage,
 } from '../shared/types.js'
 import { DEFAULTS } from '../shared/defaults.js'
 import { GitStatusManager } from './GitStatusManager.js'
@@ -46,6 +48,9 @@ import { ObjectiveManager } from './ObjectiveManager.js'
 import { ProductionDataManager } from './ProductionDataManager.js'
 import { HandoffListener } from './HandoffListener.js'
 import { MonitorOrchestrator } from './monitors/orchestrator.js'
+import { WasteDetector } from './WasteDetector.js'
+import { FleetSignaling } from './FleetSignaling.js'
+import { FleetPersistence } from './FleetPersistence.js'
 
 // Supabase persistence (initialized in startServer if env vars present)
 let persistence: SupabasePersistence | null = null
@@ -61,6 +66,15 @@ let handoffListener: HandoffListener | null = null
 
 // Monitor orchestrator (PRD 04 — autonomous monitoring)
 let monitorOrchestrator: MonitorOrchestrator | null = null
+
+// Waste detector (PRD 13, Section 6 — downstream consumer detection)
+let wasteDetector: WasteDetector | null = null
+
+// Fleet signaling (PRD 07 — remote forces WebRTC relay)
+let fleetSignaling: FleetSignaling | null = null
+
+// Fleet persistence (PRD 12 — battlefield state survives restarts)
+let fleetPersistence: FleetPersistence | null = null
 
 // ============================================================================
 // Version (read from package.json)
@@ -3308,14 +3322,26 @@ function main() {
     threatBridge.start()
 
     // Start road aggregator (polls ae_events, writes ae_roads, broadcasts to clients)
+    // Cache latest roads for WasteDetector consumption
+    let latestRoads: import('./RoadAggregator.js').RoadData[] = []
     const roadAggregator = new RoadAggregator({
       supabaseUrl,
       supabaseKey,
       onRoadsUpdated: (roads) => {
+        latestRoads = roads
         broadcast({ type: 'roads', payload: roads } as any)
       },
     })
     roadAggregator.start()
+
+    // Start waste detector (PRD 13, Section 6 — downstream consumer detection)
+    wasteDetector = new WasteDetector({
+      getRoads: () => latestRoads,
+      getSessions,
+      broadcast,
+      intervalMs: 60_000,
+    })
+    wasteDetector.start()
   } else {
     log('[ThreatDataBridge] Skipped — SUPABASE_URL or SUPABASE_KEY not set')
   }
@@ -3328,6 +3354,9 @@ function main() {
 
   // Create WebSocket server
   const wss = new WebSocketServer({ server: httpServer })
+
+  // Initialize fleet signaling relay (PRD 07)
+  fleetSignaling = new FleetSignaling(wss)
 
   wss.on('connection', (ws, req) => {
     // CSRF protection: validate Origin header
@@ -3387,8 +3416,23 @@ function main() {
 
       // Handle JSON messages
       try {
-        const message = JSON.parse(data.toString()) as ClientMessage
-        handleClientMessage(ws, message)
+        const parsed = JSON.parse(data.toString())
+
+        // Fleet signaling messages (PRD 07)
+        if (parsed.type === 'fleet_register' && fleetSignaling) {
+          const reg = parsed as FleetRegisterMessage
+          fleetSignaling.registerPeer(ws, reg.machineId, reg.capabilities ?? [])
+          return
+        }
+        if (typeof parsed.type === 'string' && parsed.type.startsWith('fleet_') && fleetSignaling) {
+          const machineId = parsed.machineId || parsed.fromMachineId
+          if (machineId) {
+            fleetSignaling.handleMessage(ws, machineId, parsed as FleetMessage)
+          }
+          return
+        }
+
+        handleClientMessage(ws, parsed as ClientMessage)
       } catch (e) {
         debug(`Failed to parse client message: ${e}`)
       }
@@ -3396,6 +3440,7 @@ function main() {
 
     ws.on('close', () => {
       stopVoiceSession(ws) // Clean up any voice session
+      if (fleetSignaling) fleetSignaling.handleDisconnect(ws) // Clean up fleet peer
       clients.delete(ws)
       log(`Client disconnected (${clients.size} total)`)
     })
@@ -3403,6 +3448,7 @@ function main() {
     ws.on('error', (error) => {
       debug(`WebSocket error: ${error}`)
       stopVoiceSession(ws) // Clean up any voice session
+      if (fleetSignaling) fleetSignaling.handleDisconnect(ws) // Clean up fleet peer
       clients.delete(ws)
     })
   })

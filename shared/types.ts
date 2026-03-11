@@ -179,6 +179,18 @@ export interface PacketConfig {
   createdAt: number
 }
 
+/** Waste detection report (PRD 13, Section 6) */
+export interface WasteReport {
+  /** Road keys (from::to) with 0 packets/hour but historical traffic */
+  deadRoads: string[]
+  /** Session IDs producing output with no downstream consumers */
+  orphanUnits: string[]
+  /** Road keys where >50% of packets are rejected */
+  highRejection: string[]
+  /** ISO timestamp of report generation */
+  generatedAt: string
+}
+
 /** Server -> Client messages */
 export type ServerMessage =
   | { type: 'event'; payload: ClaudeEvent }
@@ -199,6 +211,8 @@ export type ServerMessage =
   | { type: 'queue_update'; payload: { queues: Record<string, number> } }
   | { type: 'resource_update'; payload: { type: string; amount: number; description: string } }
   | { type: 'monitor'; payload: { heartbeats: Record<string, unknown>; revenue: { mrr: number; transactions: unknown[] }; support: { openTickets: number; urgentCount: number } } }
+  | { type: 'waste_report'; payload: WasteReport }
+  | { type: 'fleet_restore'; payload: { sessions: unknown[]; roads: unknown[]; objectives: unknown[]; threats: unknown[] } }
 
 /** Client -> Server messages */
 export type ClientMessage =
@@ -461,6 +475,92 @@ export interface UpdateTextTileRequest {
     r: number
   }
   color?: string
+}
+
+// ============================================================================
+// Fleet Signaling (PRD 07 — Remote Forces)
+// ============================================================================
+
+/** Fleet message types for WebRTC signaling relay */
+export type FleetMessageType =
+  | 'fleet_discover'
+  | 'fleet_offer'
+  | 'fleet_answer'
+  | 'fleet_ice_candidate'
+  | 'fleet_peer_joined'
+  | 'fleet_peer_left'
+
+/** Peer info returned by fleet_discover and peer events */
+export interface FleetPeerInfo {
+  machineId: string
+  capabilities: string[]
+  connectedAt: number
+}
+
+/** fleet_discover — request list of all connected peers */
+export interface FleetDiscoverMessage {
+  type: 'fleet_discover'
+  /** When sent as a response, contains the peer list */
+  peers?: FleetPeerInfo[]
+  timestamp: number
+}
+
+/** fleet_offer — WebRTC SDP offer relayed to a target peer */
+export interface FleetOfferMessage {
+  type: 'fleet_offer'
+  targetMachineId: string
+  fromMachineId?: string
+  sdp: RTCSessionDescriptionInit
+  timestamp: number
+}
+
+/** fleet_answer — WebRTC SDP answer relayed to a target peer */
+export interface FleetAnswerMessage {
+  type: 'fleet_answer'
+  targetMachineId: string
+  fromMachineId?: string
+  sdp: RTCSessionDescriptionInit
+  timestamp: number
+}
+
+/** fleet_ice_candidate — ICE candidate relayed to a target peer */
+export interface FleetIceCandidateMessage {
+  type: 'fleet_ice_candidate'
+  targetMachineId: string
+  fromMachineId?: string
+  candidate: RTCIceCandidateInit
+  timestamp: number
+}
+
+/** fleet_peer_joined — broadcast when a new machine connects */
+export interface FleetPeerJoinedMessage {
+  type: 'fleet_peer_joined'
+  machineId: string
+  capabilities: string[]
+  timestamp: number
+}
+
+/** fleet_peer_left — broadcast when a machine disconnects */
+export interface FleetPeerLeftMessage {
+  type: 'fleet_peer_left'
+  machineId: string
+  timestamp: number
+}
+
+/** Union of all fleet signaling messages */
+export type FleetMessage =
+  | FleetDiscoverMessage
+  | FleetOfferMessage
+  | FleetAnswerMessage
+  | FleetIceCandidateMessage
+  | FleetPeerJoinedMessage
+  | FleetPeerLeftMessage
+
+/** Client -> Server: register as a fleet peer */
+export interface FleetRegisterMessage {
+  type: 'fleet_register'
+  machineId: string
+  capabilities?: string[]
 }
 
 // ============================================================================
