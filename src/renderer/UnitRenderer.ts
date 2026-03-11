@@ -60,6 +60,7 @@ export class UnitRenderer {
   private _currentTool: string = ''
   private _unitClass: UnitClass = 'command'
   private modelLabel: Text
+  private createdAt: number
 
   // Animation state
   private pulsePhase = 0
@@ -70,6 +71,7 @@ export class UnitRenderer {
     this._name = name
     this.territory = territory
     this._unitClass = unitClass
+    this.createdAt = Date.now()
     this.container = new Container()
     this.container.eventMode = 'static'
     this.container.cursor = 'pointer'
@@ -312,6 +314,16 @@ export class UnitRenderer {
     // Subtle hover effect on selection ring
     if (this._selected) {
       this.selectionRing.rotation += dt * 0.5
+    }
+
+    // Lifetime fade: sub-agents fade 1.0 → 0.7 over 120 seconds
+    if (this._status === 'offline') {
+      this.container.alpha = 0.3
+    } else if (this.parentSessionId) {
+      const ageSec = (Date.now() - this.createdAt) / 1000
+      this.container.alpha = Math.max(0.7, 1.0 - (ageSec / 120) * 0.3)
+    } else {
+      this.container.alpha = 1.0
     }
   }
 

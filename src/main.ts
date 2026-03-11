@@ -763,6 +763,16 @@ function handleSessionUpdate(session: ManagedSession) {
   }
 }
 
+/** Golden angle formation: distribute sub-agents in a spiral around parent */
+function getSubAgentPosition(parentX: number, parentY: number, childIndex: number): { x: number; y: number } {
+  const angle = childIndex * 2.399963 // golden angle in radians
+  const radius = Math.min(200, 80 + childIndex * 15)
+  return {
+    x: parentX + Math.cos(angle) * radius,
+    y: parentY + Math.sin(angle) * radius,
+  }
+}
+
 function ensureUnit(session: ManagedSession) {
   let unit = battlefield.getUnit(session.id)
 
@@ -801,6 +811,22 @@ function ensureUnit(session: ManagedSession) {
 
   // Set parent session ID for connection lines
   unit.parentSessionId = session.parentSessionId
+
+  // Golden angle formation: position sub-agents around their parent
+  if (session.parentSessionId) {
+    const parentUnit = battlefield.getUnit(session.parentSessionId)
+    if (parentUnit) {
+      // Count siblings to determine this child's index
+      let childIndex = 0
+      for (const [, s] of sessions) {
+        if (s.parentSessionId === session.parentSessionId && s.id !== session.id) {
+          childIndex++
+        }
+      }
+      const pos = getSubAgentPosition(parentUnit.worldX, parentUnit.worldY, childIndex)
+      unit.setPosition(pos.x, pos.y)
+    }
+  }
 
   if (session.currentTool) {
     unit.setCurrentTool(session.currentTool)

@@ -6,96 +6,196 @@ Transform the battlefield from "same-looking dots" into a readable military comm
 
 ---
 
-## Division System
+## Division System ✅
 
 Inspired by military branches — visually distinct silhouettes per model tier:
 
-| Division | Model | Shape | Body Radius | Accent Color | Visual Weight |
-|----------|-------|-------|-------------|--------------|---------------|
-| **Command** | Opus | Hexagon | 24px | Gold `#FFB86C` | Heavy — strategic leaders |
-| **Operations** | Sonnet | Circle + chevron | 20px | Cyan `#00FFCC` | Standard — workhorse agents |
-| **Recon** | Haiku | Diamond | 14px | Phosphor `#82C896` | Light — fast extraction |
+| Division | Model | Shape | Body Radius | Accent Color | Ring Width | Visual Weight |
+|----------|-------|-------|-------------|--------------|------------|---------------|
+| **Command** | Opus | Hexagon | 44px | Amber `#FFB86C` | 4px | Heavy — strategic leaders |
+| **Operations** | Sonnet | Circle | 36px | Orange `#E8682A` | 3px | Standard — workhorse agents |
+| **Recon** | Haiku | Diamond | 26px | Phosphor `#82C896` | 2.5px | Light — fast extraction |
 
-### Detection Logic
-- Standalone sessions (launched by user) → **Command**
-- Sub-agents spawned via `Task` tool → check `model` parameter:
+### Detection Logic ✅ (`server/index.ts:1356`)
+
+`detectUnitClass()` inspects recent events to classify new sessions:
+- Standalone sessions (no Task tool parent) → **Command**
+- Sub-agents spawned via Task tool → check `model` parameter in tool input:
   - `haiku` → **Recon**
-  - `opus` → **Command** (rare, for opus sub-agents)
+  - `opus` → **Command** (rare — opus sub-agents)
   - default (sonnet or unspecified) → **Operations**
+
+### Parent Tracking ✅ (`shared/types.ts`)
+
+`parentSessionId?: string` on `ManagedSession` — set during auto-registration when `detectParentSession()` finds a recent Task tool call from another session.
 
 ---
 
 ## Unit Visual Indicators
 
-### Health Bar (Context Window)
-- Maps context usage to health: 100% context remaining = full green bar
-- Color transitions: green (>50%) → amber (25-50%) → red (<25%)
-- Width scales with unit class (command=36px, operations=30px, recon=22px)
+### Body Shape ✅ (`UnitRenderer.ts` — `drawBody()`)
+- **Command**: Hexagon — 6-point polygon with inner highlight
+- **Operations**: Circle with inner highlight
+- **Recon**: Diamond (4-point polygon rotated 45°) with inner highlight
+- All shapes use territory-based fill colors at 0.9 alpha
 
-### Model Label
-- Tiny text below health bar: "OPUS", "SONNET", "HAIKU"
-- Color matches division accent
-- 7px JetBrains Mono
+### Health Bar ✅ (`UnitRenderer.ts` — `drawHealthBar()`)
+- Maps context usage to health: `1 - (tokens.current / 200000)`
+- Width scales with unit class: command=64px, operations=52px, recon=40px
+- Color transitions:
+  - Green `#82C896` (>50% remaining)
+  - Amber `#FFB86C` (25-50% remaining)
+  - Orange-red `#E8682A` (<25% remaining)
 
-### Status Ring
-- Existing pulse animation, now class-aware (thicker for command, thinner for recon)
-- Outer accent ring shows division color at 25% opacity
+### Model Label ✅ (`UnitRenderer.ts`)
+- Text below health bar: "OPUS", "SONNET", "HAIKU"
+- Color matches division accent, 13px JetBrains Mono, 0.6 alpha
+- Updates dynamically via `setUnitClass()`
 
-### Lifetime Indicator (Phase 2B)
-- Sub-agents fade slightly as they age (opacity 1.0 → 0.7 over lifetime)
-- Completed sub-agents shrink-animate to 0 over 500ms then remove
-- Offline units dim to 30% opacity (already partially implemented)
+### Status Ring ✅ (`UnitRenderer.ts` — `drawStatusRing()`)
+- Pulsing ring with class-aware thickness (4/3/2.5px)
+- Color by status: idle=phosphor green, working=warm orange, thinking=teal, offline=cream-dim
+- Outer accent ring at radius+12, 1.5px width, 25% alpha — shows division color
 
----
+### Selection Ring ✅ (`UnitRenderer.ts` — `drawSelectionRing()`)
+- Dashed arc segments (12 segments, alternating visible/hidden)
+- Uses division accent color at 0.8 alpha
+- Rotates slowly when selected
 
-## Parent-Child Connection Lines (Phase 2B)
-
-### Visual
-- Thin dashed line from parent unit to each active sub-agent
-- Color: parent's division accent at 30% opacity
-- Animated dash pattern (marching ants) while sub-agent is working
-- Line fades when sub-agent completes
-
-### Data Model
-- Server tracks `parentSessionId` on each managed session
-- Detected from the `Task` tool's `pre_tool_use` event (the session that called Task = parent)
-- Client draws lines in the effects layer between parent and child world positions
-
-### Formation
-- Sub-agents cluster near their parent but offset in a fan pattern
-- Avoid overlapping — use angular distribution around parent position
+### Zoom-Responsive Labels ✅ (`UnitRenderer.ts` — `setZoomScale()`)
+- Counter-scales nameplate, tool text, model label, health bar based on zoom level
+- Clamp at 2.5x to prevent absurd sizes at extreme zoom-out
 
 ---
 
-## Roads System Preview (Phase 2C)
+## Parent-Child Connection Lines ✅ (`ConnectionLineRenderer.ts`)
 
-- Repeated unit movement between territories creates persistent "TRON data highways"
-- Road opacity = movement frequency (faint → bright)
-- Thin animated cyan lines along road paths
-- Roads are the "magnetic residue" — the traces left by agent activity
+- Marching ants dashed lines from parent to each active sub-agent
+- Line color: parent's division accent color
+- Alpha varies by sub-agent status
+- Lines drawn in effects layer between parent and child world positions
 
 ---
 
-## File Changes
+## Roads System ✅ (`RoadRenderer.ts`)
 
-| File | Change |
-|------|--------|
-| `src/renderer/UnitRenderer.ts` | Add UnitClass, division shapes, model label, class-specific sizing |
-| `server/index.ts` | detectUnitClass() helper, parentSessionId tracking |
-| `src/main.ts` | Wire unitClass from session to UnitRenderer |
-| `shared/types.ts` | Add unitClass and parentSessionId to ManagedSession (Phase 2B) |
-| `src/renderer/ConnectionLineRenderer.ts` | NEW — parent-child lines (Phase 2B) |
-| `src/renderer/RoadsRenderer.ts` | NEW — TRON data highways (Phase 2C) |
+- Bezier curve paths between territories
+- Animated dot flow along road paths
+- 5-tier level system based on movement frequency
+- Hover tooltips showing road usage stats
+
+---
+
+## Virtual Sub-Agent Spawning ✅ (`server/index.ts ~line 1495`)
+
+- Agent tool fires create temporary managed sessions
+- Sub-agents tracked with `parentSessionId` linking back to spawning session
+- Unit class auto-detected at registration time
+- Sessions broadcast to all connected clients
+
+---
+
+## Sub-Agent Formation ✅ (`main.ts`)
+
+- `getSubAgentPosition(parentX, parentY, childIndex, totalChildren)` helper
+- Golden angle distribution: `angle = childIndex * 2.399963` radians
+- Radius: `80 + (childIndex * 15)` pixels, capped at 200px
+- Sub-agents override default territory spread with parent-relative positioning
+
+---
+
+## OPEN — Remaining Work
+
+### ⬜ 1. Lifetime Fade ✅ (now implemented)
+
+Sub-agents should visually age to signal remaining useful context.
+
+**Implementation** (`UnitRenderer.ts`):
+- `createdAt: number` field, set to `Date.now()` in constructor
+- In `update(dt)`, calculate `age = (Date.now() - createdAt) / 1000`
+- If `parentSessionId` is set (sub-agent), lerp container alpha: `1.0 → 0.7` over 120 seconds
+- If status is `'offline'`, alpha = 0.3 (overrides age fade)
+- Formula: `alpha = Math.max(0.7, 1.0 - (age / 120) * 0.3)`
+
+### ⬜ 2. Shrink-to-Zero Animation
+
+When a sub-agent completes (session removed from server), animate scale to 0 over 500ms before destroying.
+
+**Spec**:
+- Currently: `battlefield.removeUnit(id)` is called immediately when session disappears from the session list
+- Target: Instead of immediate removal, trigger a 500ms scale tween: `container.scale` from current → 0
+- After tween completes, call `destroy()` and remove from units map
+- Use PixiJS ticker-based animation (no external tween lib):
+  ```
+  shrinkTimer: number = 0
+  isShrinking: boolean = false
+
+  startShrink(): void — sets isShrinking = true, shrinkTimer = 0
+
+  In update(dt):
+    if isShrinking:
+      shrinkTimer += dt
+      progress = Math.min(1, shrinkTimer / 0.5)
+      scale = 1 - progress
+      container.scale.set(scale)
+      if progress >= 1: emit 'shrink-complete' or set flag for parent to remove
+  ```
+- `BattlefieldRenderer.removeUnit()` should call `unit.startShrink()` instead of immediate destroy, then clean up on completion
+
+### ⬜ 3. Sprite Atlas Integration
+
+`scripts/export-sprites.html` generates PixiJS atlas JSON + sprite sheets. UnitRenderer still uses procedural Graphics shapes.
+
+**Spec**:
+- Load atlas on app init: `Assets.load('sprites/unit-atlas.json')` → returns `Spritesheet`
+- In UnitRenderer constructor, check if atlas is available (pass via constructor or global):
+  - If atlas loaded: create `Sprite` from atlas frame matching unit class (`command.png`, `operations.png`, `recon.png`)
+  - If atlas missing: fall back to current procedural `drawBody()` (Graphics shapes)
+- Sprite sizing: scale sprite to match `CLASS_CONFIG[unitClass].radius * 2` dimensions
+- Territory tint: apply `sprite.tint = TERRITORY_UNIT_COLORS[territory]`
+- On `setUnitClass()`: swap sprite texture from atlas if available, else redraw Graphics
+- Atlas frames expected: `command.png`, `operations.png`, `recon.png`, `command-selected.png`, etc.
+
+### ⬜ 4. Golden Angle Formation ✅ (now implemented)
+
+Sub-agents distribute around parent using golden angle spacing.
+
+**Implementation** (`main.ts`):
+- `getSubAgentPosition(parentX, parentY, childIndex)` helper function
+- `angle = childIndex * 2.399963` (golden angle in radians)
+- `radius = Math.min(200, 80 + childIndex * 15)` pixels
+- Returns `{ x: parentX + cos(angle) * radius, y: parentY + sin(angle) * radius }`
+- Called in `ensureUnit()` when `session.parentSessionId` is set — overrides default territory spread
+
+---
+
+## File Map (Current State)
+
+| File | Status | What It Does |
+|------|--------|-------------|
+| `src/renderer/UnitRenderer.ts` | ✅ Shipped | Division shapes, class sizing, health bar, model label, status ring, selection ring, zoom scaling, lifetime fade |
+| `src/renderer/ConnectionLineRenderer.ts` | ✅ Shipped | Marching ants parent-child lines |
+| `src/renderer/RoadRenderer.ts` | ✅ Shipped | Bezier curve roads with animated dots, 5 tiers |
+| `server/index.ts` | ✅ Shipped | `detectUnitClass()` at line 1356, `detectParentSession()`, auto-registration with unitClass |
+| `shared/types.ts` | ✅ Shipped | `parentSessionId` on ManagedSession |
+| `src/main.ts` | ✅ Shipped | Wires unitClass, parentSessionId, sub-agent formation positioning |
+| `scripts/export-sprites.html` | ✅ Exists | Generates atlas JSON + sprite sheets (not yet wired to renderer) |
 
 ---
 
 ## Success Criteria
 
-- [ ] Opus sessions render as hexagons with gold accent
-- [ ] Sonnet sub-agents render as circles with cyan accent
-- [ ] Haiku sub-agents render as diamonds with green accent
-- [ ] Model label visible below each unit
-- [ ] Context health bar color-transitions correctly
-- [ ] Sub-agents auto-detected from Task tool events
-- [ ] `npx vite build` passes with zero errors
-- [ ] No visual regressions on existing floating panel, combat, movement
+- [x] Opus sessions render as hexagons with amber accent
+- [x] Sonnet sub-agents render as circles with orange accent
+- [x] Haiku sub-agents render as diamonds with phosphor green accent
+- [x] Model label visible below each unit (13px JetBrains Mono)
+- [x] Context health bar with green→amber→red transitions at 50%/25%
+- [x] Sub-agents auto-detected from Task tool events via `detectUnitClass()`
+- [x] `parentSessionId` tracked and connection lines drawn
+- [x] Roads system with bezier curves, dot animation, 5 tiers
+- [x] Zoom-responsive label scaling
+- [x] Sub-agent golden angle formation around parent
+- [x] Lifetime fade: sub-agents fade 1.0→0.7 over 120s
+- [ ] Shrink-to-zero animation on sub-agent completion
+- [ ] Sprite atlas integration (procedural Graphics → Sprite textures)
+- [x] `npx vite build` passes with zero errors
