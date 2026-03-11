@@ -99,20 +99,74 @@ class HeartbeatMonitor {
 // StripeMonitor (stub — real integration in PRD 05)
 // ============================================================================
 
+export interface Transaction {
+  id: string
+  stripe_event_id: string | null
+  type: string
+  amount_cents: number
+  currency: string
+  customer_id: string | null
+  description: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
 class StripeMonitor {
-  private endpoint: string
+  private supabaseUrl: string
+  private supabaseKey: string
   private intervalMs: number
   private snapshot: RevenueSnapshot = { mrr: 0, transactions: [] }
 
-  constructor(opts?: { endpoint?: string; intervalMs?: number }) {
-    this.endpoint = opts?.endpoint ?? ''
+  constructor(opts?: { supabaseUrl?: string; supabaseKey?: string; intervalMs?: number }) {
+    this.supabaseUrl = opts?.supabaseUrl ?? ''
+    this.supabaseKey = opts?.supabaseKey ?? ''
     this.intervalMs = opts?.intervalMs ?? 60_000
   }
 
+  private headers(): Record<string, string> {
+    return {
+      'apikey': this.supabaseKey,
+      'Authorization': `Bearer ${this.supabaseKey}`,
+      'Content-Type': 'application/json',
+    }
+  }
+
   async fetchRevenue(): Promise<RevenueSnapshot> {
-    // Stub: returns mock data
-    // PRD 05 will replace this with actual Stripe API polling
-    return { mrr: 0, transactions: [] }
+    if (!this.supabaseUrl || !this.supabaseKey) {
+      return { mrr: 0, transactions: [] }
+    }
+
+    // Query last 30 days of charge.succeeded and invoice.paid for revenue sum
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const revenueTypes = 'type.in.("charge.succeeded","invoice.paid")'
+    const dateFilter = `created_at.gte.${thirtyDaysAgo}`
+
+    const revenueUrl = `${this.supabaseUrl}/rest/v1/ae_transactions?select=amount_cents,type,created_at&${revenueTypes}&${dateFilter}`
+    const recentUrl = `${this.supabaseUrl}/rest/v1/ae_transactions?select=*&order=created_at.desc&limit=10`
+
+    const [revenueRes, recentRes] = await Promise.all([
+      fetch(revenueUrl, { headers: this.headers() }),
+      fetch(recentUrl, { headers: this.headers() }),
+    ])
+
+    let mrr = 0
+    if (revenueRes.ok) {
+      const rows = await revenueRes.json() as { amount_cents: number; type: string; created_at: string }[]
+      const totalCents = rows.reduce((sum, r) => sum + r.amount_cents, 0)
+      // MRR estimate: total revenue in last 30 days (approximation from actual charges)
+      mrr = totalCents / 100
+    } else {
+      console.error(`[StripeMonitor] Revenue query failed (${revenueRes.status}): ${await revenueRes.text()}`)
+    }
+
+    let transactions: Transaction[] = []
+    if (recentRes.ok) {
+      transactions = await recentRes.json() as Transaction[]
+    } else {
+      console.error(`[StripeMonitor] Recent transactions query failed (${recentRes.status}): ${await recentRes.text()}`)
+    }
+
+    return { mrr, transactions }
   }
 
   async tick(): Promise<RevenueSnapshot> {
@@ -176,12 +230,16 @@ export class MonitorOrchestrator {
     getSessions: SessionProvider
     broadcast: BroadcastFn
     pollIntervalMs?: number
-    stripeEndpoint?: string
+    supabaseUrl?: string
+    supabaseKey?: string
   }) {
     this.broadcast = opts.broadcast
     this.pollIntervalMs = opts.pollIntervalMs ?? 30_000  // 30s default
     this.heartbeatMonitor = new HeartbeatMonitor(opts.getSessions)
-    this.stripeMonitor = new StripeMonitor({ endpoint: opts.stripeEndpoint })
+    this.stripeMonitor = new StripeMonitor({
+      supabaseUrl: opts.supabaseUrl,
+      supabaseKey: opts.supabaseKey,
+    })
     this.slackMonitor = new SlackMonitor()
   }
 

@@ -2842,6 +2842,96 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
   // Text Tiles API
   // -------------------------------------------------------------------------
 
+  // ========================================================================
+  // POST /webhooks/stripe — Stripe webhook receiver (PRD 05)
+  // TODO: Add Stripe signature verification for production (stripe-webhook-secret)
+  // ========================================================================
+  if (req.method === 'POST' && req.url === '/webhooks/stripe') {
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_KEY
+    collectRequestBody(req).then(body => {
+      try {
+        const event = JSON.parse(body)
+        const eventType: string = event.type ?? 'unknown'
+        const eventId: string = event.id ?? null
+        const dataObject = event.data?.object ?? {}
+
+        // Extract common fields from Stripe event
+        const amountCents: number = dataObject.amount ?? dataObject.amount_paid ?? 0
+        const currency: string = dataObject.currency ?? 'usd'
+        const customerId: string = dataObject.customer ?? null
+        const description: string = dataObject.description ?? dataObject.billing_reason ?? eventType
+
+        log(`[Stripe] Received ${eventType} — $${(amountCents / 100).toFixed(2)} ${currency}`)
+
+        // Fire-and-forget: persist to ae_transactions via Supabase REST
+        if (supabaseUrl && supabaseKey) {
+          fetch(`${supabaseUrl}/rest/v1/ae_transactions`, {
+            method: 'POST',
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({
+              stripe_event_id: eventId,
+              type: eventType,
+              amount_cents: amountCents,
+              currency,
+              customer_id: customerId,
+              description,
+              metadata: dataObject.metadata ?? null,
+            }),
+          }).then(r => {
+            if (!r.ok) r.text().then(t => console.error(`[Stripe] Supabase insert failed (${r.status}): ${t}`))
+          }).catch(err => console.error('[Stripe] Supabase insert error:', err))
+        }
+
+        // Broadcast to WebSocket clients based on event type
+        if (eventType === 'charge.succeeded' || eventType === 'invoice.paid') {
+          broadcast({
+            type: 'resource_update',
+            payload: {
+              type: 'revenue',
+              amount: amountCents / 100,
+              description: `${eventType}: $${(amountCents / 100).toFixed(2)} ${currency}`,
+            },
+          } as ServerMessage)
+        }
+
+        if (eventType === 'customer.subscription.deleted') {
+          broadcast({
+            type: 'threat',
+            payload: {
+              id: eventId ?? randomUUID(),
+              type: 'churn_risk',
+              severity: 'elevated',
+              territory: 'sales',
+              title: 'Subscription Cancelled',
+              description: `Customer ${customerId ?? 'unknown'} cancelled — $${(amountCents / 100).toFixed(2)}/mo lost`,
+              sourceTable: 'ae_transactions',
+              sourceId: eventId ?? '',
+              timestamp: Date.now(),
+            },
+          } as ServerMessage)
+        }
+
+        // Always return 200 immediately (Stripe expects fast acknowledgement)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, received: eventType }))
+      } catch (e) {
+        console.error('[Stripe] Parse error:', e)
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+      }
+    }).catch(() => {
+      res.writeHead(413, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Request body too large' }))
+    })
+    return
+  }
+
   // GET /tiles - List all text tiles
   if (req.method === 'GET' && req.url === '/tiles') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -3273,6 +3363,8 @@ function main() {
       getSessions,
       broadcast,
       pollIntervalMs: 30_000,
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseKey: process.env.SUPABASE_KEY,
     })
     monitorOrchestrator.start()
   })
