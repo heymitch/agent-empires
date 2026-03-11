@@ -165,6 +165,8 @@ export interface ThreatEvent {
   sourceTable: string
   sourceId: string
   timestamp: number
+  /** Threat class for visual differentiation (see shared/threatClasses.ts) */
+  threatClass?: import('./threatClasses').ThreatClass
 }
 
 /** Packet configuration for visual data flow along roads */
@@ -195,6 +197,7 @@ export type ServerMessage =
   | { type: 'production'; payload: unknown }
   | { type: 'packet'; payload: PacketConfig }
   | { type: 'queue_update'; payload: { queues: Record<string, number> } }
+  | { type: 'resource_update'; payload: { type: string; amount: number; description: string } }
   | { type: 'monitor'; payload: { heartbeats: Record<string, unknown>; revenue: { mrr: number; transactions: unknown[] }; support: { openTickets: number; urgentCount: number } } }
 
 /** Client -> Server messages */

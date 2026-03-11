@@ -14,6 +14,8 @@ export interface RoadData {
   packetCount: number
   roadLevel: number
   lastPacketAt: string | null
+  packetsPerHour: number
+  queueDepth: number
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
@@ -80,6 +82,8 @@ interface RoadState {
   to: string
   level: number
   packetCount: number
+  packetsPerHour: number
+  queueDepth: number
   fx: number // from center x
   fy: number
   tx: number // to center x
@@ -199,6 +203,8 @@ export class RoadRenderer {
         to: r.toTerritory,
         level: r.roadLevel,
         packetCount: r.packetCount,
+        packetsPerHour: r.packetsPerHour ?? 0,
+        queueDepth: r.queueDepth ?? 0,
         fx: fromCenter.x,
         fy: fromCenter.y,
         tx: toCenter.x,
@@ -297,10 +303,19 @@ export class RoadRenderer {
     const levelName = LEVEL_LABELS[road.level] || `Level ${road.level}`
     const levelColor = road.level >= 4 ? '#FFB86C' : road.level >= 3 ? '#B4A690' : '#6B6152'
 
+    // Throughput color: green (>5/hr), amber (1-5/hr), red (0/hr)
+    const throughputColor = road.packetsPerHour > 5 ? '#50FA7B' : road.packetsPerHour >= 1 ? '#FFB86C' : '#FF5555'
+
+    const queueLine = road.queueDepth > 0
+      ? `<div style="color:#FFB86C;margin-top:2px">Queue: ${road.queueDepth} pending</div>`
+      : ''
+
     this.tooltip.innerHTML = `
       <div style="color:${levelColor};font-weight:bold;margin-bottom:3px">${levelName}</div>
       <div>${fromName} → ${toName}</div>
       <div style="color:#6B6152;margin-top:3px">${road.packetCount} packets</div>
+      <div style="margin-top:2px">Throughput: <span style="color:${throughputColor}">${road.packetsPerHour}/hr</span></div>
+      ${queueLine}
     `
     this.tooltip.style.display = 'block'
     this.tooltip.style.left = `${screenX + 16}px`

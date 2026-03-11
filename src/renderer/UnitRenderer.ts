@@ -11,6 +11,7 @@
 
 import { Container, Graphics, Text, TextStyle, Circle } from 'pixi.js'
 import type { TerritoryId } from './TerrainRenderer'
+import type { ZoomVisibility } from './ZoomController'
 
 export type UnitStatus = 'idle' | 'working' | 'thinking' | 'combat' | 'exhausted' | 'offline'
 export type UnitClass = 'command' | 'operations' | 'recon'
@@ -308,9 +309,8 @@ export class UnitRenderer {
     this.drawSelectionRing()
   }
 
-  /** Adjust label scale so text stays readable regardless of zoom level */
-  setZoomScale(zoom: number): void {
-    // At zoom 1.0 labels are native size. At zoom 0.3 they'd be tiny.
+  /** Adjust label scale and toggle chrome visibility based on zoom tier */
+  setZoomScale(zoom: number, visibility?: ZoomVisibility): void {
     // Counter-scale labels so they stay ~constant screen size.
     // Clamp so they don't get absurdly large at extreme zoom-out.
     const labelScale = Math.min(2.5, 1 / Math.max(zoom, 0.2))
@@ -318,6 +318,27 @@ export class UnitRenderer {
     this.toolText.scale.set(labelScale)
     this.modelLabel.scale.set(labelScale)
     this.healthBar.scale.set(Math.min(1.8, labelScale))
+
+    // Apply semantic zoom visibility when provided
+    if (visibility) {
+      this.healthBar.visible = visibility.showHealthBars
+      this.toolText.visible = visibility.showToolText
+      this.modelLabel.visible = visibility.showModelLabels
+
+      // At strategic zoom: hide all chrome, show only body + nameplate
+      if (!visibility.showUnitDetails) {
+        this.nameplate.visible = true
+        this.statusRing.visible = false
+        this.selectionRing.visible = false
+        this.healthBar.visible = false
+        this.toolText.visible = false
+        this.modelLabel.visible = false
+      } else {
+        this.nameplate.visible = true
+        this.statusRing.visible = true
+        this.selectionRing.visible = this._selected
+      }
+    }
   }
 
   update(dt: number): void {

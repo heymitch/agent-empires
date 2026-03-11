@@ -8,6 +8,7 @@
 import { Application, Container, Graphics } from 'pixi.js'
 import { TerrainRenderer, type TerritoryId } from './TerrainRenderer'
 import { UnitRenderer, type UnitStatus } from './UnitRenderer'
+import { getZoomVisibility } from './ZoomController'
 import { FogOfWar } from './FogOfWar'
 import { MinimapRenderer } from './MinimapRenderer'
 import { ParticleSystem } from './ParticleSystem'
@@ -243,10 +244,11 @@ export class BattlefieldRenderer {
     // Update particle system
     this.particleSystem.update(this.app.ticker.deltaMS / 1000)
 
-    // Update unit animations + zoom-adaptive labels
+    // Update unit animations + zoom-adaptive labels with semantic visibility
+    const visibility = getZoomVisibility(this.zoom)
     for (const unit of this.units.values()) {
       unit.update(this.app.ticker.deltaMS / 1000)
-      unit.setZoomScale(this.zoom)
+      unit.setZoomScale(this.zoom, visibility)
     }
 
     // Fog of war — tuned to 45% dark (atmospheric, not blinding), 500px visibility radius

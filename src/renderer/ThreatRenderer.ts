@@ -1,5 +1,12 @@
 import { Container, Graphics, Text } from 'pixi.js'
 import { ISO_TILT } from './constants'
+import {
+  type ThreatClass,
+  type ThreatSeverity,
+  type SeverityShape,
+  THREAT_CLASS_CONFIGS,
+  SEVERITY_SHAPE,
+} from '../../shared/threatClasses'
 
 export interface ThreatEvent {
   id: string
@@ -9,22 +16,70 @@ export interface ThreatEvent {
   title: string
   description: string
   timestamp: number
+  threatClass?: ThreatClass
 }
 
 export type TerritoryBoundsGetter = (territory: string) => { x: number; y: number } | null
 
+/** Map the renderer's 3-level severity to the taxonomy's 4-level severity */
+function toThreatSeverity(rendererSeverity: ThreatEvent['severity']): ThreatSeverity {
+  switch (rendererSeverity) {
+    case 'critical': return 'critical'
+    case 'elevated': return 'high'
+    case 'low': return 'low'
+  }
+}
+
 interface SeverityConfig {
   color: number
+  borderColor: number
   baseRadius: number
   amplitude: number
   baseAlpha: number
   alphaRange: number
   cycleSeconds: number
+  shape: SeverityShape
 }
 
-const SEVERITY_CONFIG: Record<ThreatEvent['severity'], SeverityConfig> = {
+function buildSeverityConfig(event: ThreatEvent): SeverityConfig {
+  const classConfig = event.threatClass
+    ? THREAT_CLASS_CONFIGS[event.threatClass]
+    : null
+
+  const severity = event.threatClass
+    ? THREAT_CLASS_CONFIGS[event.threatClass].severity
+    : toThreatSeverity(event.severity)
+
+  const shape = SEVERITY_SHAPE[severity]
+
+  // Use class colors when available, fall back to legacy palette
+  const color = classConfig?.color ?? LEGACY_SEVERITY_COLOR[event.severity]
+  const borderColor = classConfig?.borderColor ?? (color & 0xBBBBBB)
+
+  // Size and pulse vary by legacy severity (controls visual urgency)
+  const base = LEGACY_PULSE[event.severity]
+
+  return {
+    color,
+    borderColor,
+    baseRadius: base.baseRadius,
+    amplitude: base.amplitude,
+    baseAlpha: base.baseAlpha,
+    alphaRange: base.alphaRange,
+    cycleSeconds: base.cycleSeconds,
+    shape,
+  }
+}
+
+// Legacy fallback colors (used when threatClass is not set)
+const LEGACY_SEVERITY_COLOR: Record<ThreatEvent['severity'], number> = {
+  critical: 0xE8682A,
+  elevated: 0xFFB86C,
+  low: 0xB4A690,
+}
+
+const LEGACY_PULSE: Record<ThreatEvent['severity'], Omit<SeverityConfig, 'color' | 'borderColor' | 'shape'>> = {
   critical: {
-    color: 0xE8682A,     // warm orange
     baseRadius: 20,
     amplitude: 5,
     baseAlpha: 0.55,
@@ -32,7 +87,6 @@ const SEVERITY_CONFIG: Record<ThreatEvent['severity'], SeverityConfig> = {
     cycleSeconds: 1.5,
   },
   elevated: {
-    color: 0xFFB86C,     // amber
     baseRadius: 14,
     amplitude: 4,
     baseAlpha: 0.4,
@@ -40,7 +94,6 @@ const SEVERITY_CONFIG: Record<ThreatEvent['severity'], SeverityConfig> = {
     cycleSeconds: 2.0,
   },
   low: {
-    color: 0xB4A690,     // cream-dim
     baseRadius: 10,
     amplitude: 2,
     baseAlpha: 0.275,
@@ -55,14 +108,18 @@ const TYPE_ICON: Record<string, string> = {
   default: '•',
 }
 
-function getTypeIcon(type: string): string {
-  return TYPE_ICON[type] ?? TYPE_ICON['default']
+function getTypeIcon(event: ThreatEvent): string {
+  // Prefer threat class icon when available
+  if (event.threatClass) {
+    return THREAT_CLASS_CONFIGS[event.threatClass].icon
+  }
+  return TYPE_ICON[event.type] ?? TYPE_ICON['default']
 }
 
 interface ActiveThreat {
   event: ThreatEvent
   container: Container
-  circle: Graphics
+  shapeGfx: Graphics
   phase: number
   config: SeverityConfig
   // Pop-in / pop-out animation state
@@ -71,6 +128,92 @@ interface ActiveThreat {
 }
 
 const POP_DURATION_MS = 300
+
+// ============================================================================
+// Shape Drawing Helpers
+// ============================================================================
+
+function drawShape(g: Graphics, shape: SeverityShape, radius: number, color: number, alpha: number, borderColor: number): void {
+  g.clear()
+
+  switch (shape) {
+    case 'circle':
+      g.circle(0, 0, radius)
+        .fill({ color, alpha })
+      g.circle(0, 0, radius)
+        .stroke({ color: borderColor, alpha: alpha * 0.8, width: 1.5 })
+      break
+
+    case 'triangle': {
+      const h = radius * 1.3
+      const halfBase = radius * 1.1
+      g.moveTo(0, -h)
+        .lineTo(halfBase, h * 0.6)
+        .lineTo(-halfBase, h * 0.6)
+        .closePath()
+        .fill({ color, alpha })
+      g.moveTo(0, -h)
+        .lineTo(halfBase, h * 0.6)
+        .lineTo(-halfBase, h * 0.6)
+        .closePath()
+        .stroke({ color: borderColor, alpha: alpha * 0.8, width: 1.5 })
+      break
+    }
+
+    case 'diamond': {
+      const dx = radius * 1.1
+      const dy = radius * 1.4
+      g.moveTo(0, -dy)
+        .lineTo(dx, 0)
+        .lineTo(0, dy)
+        .lineTo(-dx, 0)
+        .closePath()
+        .fill({ color, alpha })
+      g.moveTo(0, -dy)
+        .lineTo(dx, 0)
+        .lineTo(0, dy)
+        .lineTo(-dx, 0)
+        .closePath()
+        .stroke({ color: borderColor, alpha: alpha * 0.8, width: 2 })
+      break
+    }
+
+    case 'star': {
+      // 6-point star for critical threats
+      const outerR = radius * 1.4
+      const innerR = radius * 0.65
+      const points = 6
+      g.moveTo(0, -outerR)
+      for (let i = 0; i < points; i++) {
+        const outerAngle = (Math.PI * 2 * i) / points - Math.PI / 2
+        const innerAngle = outerAngle + Math.PI / points
+        g.lineTo(Math.cos(outerAngle) * outerR, Math.sin(outerAngle) * outerR)
+        g.lineTo(Math.cos(innerAngle) * innerR, Math.sin(innerAngle) * innerR)
+      }
+      g.closePath()
+        .fill({ color, alpha })
+      // Re-trace for stroke
+      g.moveTo(0, -outerR)
+      for (let i = 0; i < points; i++) {
+        const outerAngle = (Math.PI * 2 * i) / points - Math.PI / 2
+        const innerAngle = outerAngle + Math.PI / points
+        g.lineTo(Math.cos(outerAngle) * outerR, Math.sin(outerAngle) * outerR)
+        g.lineTo(Math.cos(innerAngle) * innerR, Math.sin(innerAngle) * innerR)
+      }
+      g.closePath()
+        .stroke({ color: borderColor, alpha: alpha * 0.9, width: 2 })
+      break
+    }
+  }
+
+  // Outer glow ring (all shapes get a circle glow)
+  g.circle(0, 0, radius + 4)
+    .stroke({ color, alpha: alpha * 0.3, width: 1.5 })
+}
+
+// ============================================================================
+// ThreatRenderer
+// ============================================================================
 
 export class ThreatRenderer {
   private layer: Container
@@ -88,7 +231,7 @@ export class ThreatRenderer {
     const center = this.getTerritoryCenter(event.territory)
     if (!center) return
 
-    const config = SEVERITY_CONFIG[event.severity]
+    const config = buildSeverityConfig(event)
 
     // Offset by index so multiple threats on same territory don't stack
     const index = this.getThreatCount(event.territory)
@@ -100,13 +243,13 @@ export class ThreatRenderer {
     container.y = center.y + offsetY
     container.scale.set(0, 0) // Start at 0 for pop-in
 
-    // Pulsing circle (redrawn each frame)
-    const circle = new Graphics()
-    container.addChild(circle)
+    // Shape graphic (redrawn each frame for pulse)
+    const shapeGfx = new Graphics()
+    container.addChild(shapeGfx)
 
     // Icon symbol
     const icon = new Text({
-      text: getTypeIcon(event.type),
+      text: getTypeIcon(event),
       style: {
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: 11,
@@ -135,12 +278,31 @@ export class ThreatRenderer {
     label.y = -(config.baseRadius + config.amplitude + 4)
     container.addChild(label)
 
+    // Threat class label below the shape
+    if (event.threatClass) {
+      const classConfig = THREAT_CLASS_CONFIGS[event.threatClass]
+      const classLabel = new Text({
+        text: classConfig.name.toUpperCase(),
+        style: {
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 7,
+          fill: classConfig.color,
+          align: 'center',
+          letterSpacing: 1,
+        },
+      })
+      classLabel.anchor.set(0.5, 0)
+      classLabel.x = 0
+      classLabel.y = config.baseRadius + config.amplitude + 4
+      container.addChild(classLabel)
+    }
+
     this.layer.addChild(container)
 
     this.threats.set(event.id, {
       event,
       container,
-      circle,
+      shapeGfx,
       phase: 0,
       config,
       animState: 'entering',
@@ -196,16 +358,8 @@ export class ThreatRenderer {
       const radius = config.baseRadius + config.amplitude * sinVal
       const alpha = config.baseAlpha + config.alphaRange * sinVal
 
-      // Redraw circle
-      threat.circle.clear()
-      threat.circle
-        .circle(0, 0, radius)
-        .fill({ color: config.color, alpha })
-
-      // Outer glow ring (subtle)
-      threat.circle
-        .circle(0, 0, radius + 4)
-        .stroke({ color: config.color, alpha: alpha * 0.3, width: 1.5 })
+      // Redraw shape with class-aware colors and severity-driven geometry
+      drawShape(threat.shapeGfx, config.shape, radius, config.color, alpha, config.borderColor)
     }
   }
 

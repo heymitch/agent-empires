@@ -12,6 +12,8 @@ export interface RoadData {
   packetCount: number
   roadLevel: number
   lastPacketAt: string | null
+  packetsPerHour: number
+  queueDepth: number
 }
 
 export interface RoadAggregatorConfig {
@@ -157,22 +159,57 @@ export class RoadAggregator {
       sessionEvents.set(ev.session_id, list)
     }
 
+    // One hour ago (for per-hour rate calculation)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+
     // Count territory-transition packets per (from, to) pair
-    const pairCounts = new Map<string, { count: number; lastAt: string | null }>()
+    const pairCounts = new Map<string, { count: number; lastAt: string | null; hourCount: number; pendingCount: number }>()
 
     for (const [, evts] of sessionEvents) {
       // Find territory transitions within this session
       let prevTerritory: string | null = null
+      let prevEvent: AeEvent | null = null
       for (const ev of evts) {
         if (prevTerritory !== null && ev.territory !== prevTerritory) {
           // Territory transition detected
           const key = `${prevTerritory}::${ev.territory}`
-          const existing = pairCounts.get(key) ?? { count: 0, lastAt: null }
+          const existing = pairCounts.get(key) ?? { count: 0, lastAt: null, hourCount: 0, pendingCount: 0 }
           existing.count += 1
           existing.lastAt = ev.created_at
+          // Count transitions within the last hour
+          if (ev.created_at >= oneHourAgo) {
+            existing.hourCount += 1
+          }
+          // If transition started but hasn't completed (no further event from destination),
+          // track as pending — we check this after the loop
           pairCounts.set(key, existing)
         }
         prevTerritory = ev.territory
+        prevEvent = ev
+      }
+
+      // If the session's last event shows it mid-transition (still in a territory
+      // with prior transitions), count as a pending handoff on the last road used
+      if (prevEvent && prevTerritory) {
+        // Find the last transition key for this session
+        let secondLast: string | null = null
+        let lastTerr: string | null = null
+        for (const ev of evts) {
+          if (lastTerr !== null && ev.territory !== lastTerr) {
+            secondLast = lastTerr
+          }
+          lastTerr = ev.territory
+        }
+        if (secondLast && lastTerr && secondLast !== lastTerr) {
+          const key = `${secondLast}::${lastTerr}`
+          const existing = pairCounts.get(key)
+          // If the last event is recent (within 5 min) and session hasn't ended,
+          // treat as pending/in-flight
+          const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+          if (existing && prevEvent.created_at >= fiveMinAgo && prevEvent.event_type !== 'session_end') {
+            existing.pendingCount += 1
+          }
+        }
       }
 
       // Also count tool_call events per territory pair:
@@ -188,11 +225,13 @@ export class RoadAggregator {
 
         // For each pair of territories active in this session,
         // add tool_call count as additional road traffic
+        const recentToolCalls = toolCalls.filter(e => e.created_at >= oneHourAgo)
         for (let i = 0; i < territoryList.length; i++) {
           for (let j = i + 1; j < territoryList.length; j++) {
             const key = `${territoryList[i]}::${territoryList[j]}`
-            const existing = pairCounts.get(key) ?? { count: 0, lastAt: null }
+            const existing = pairCounts.get(key) ?? { count: 0, lastAt: null, hourCount: 0, pendingCount: 0 }
             existing.count += toolCalls.length
+            existing.hourCount += recentToolCalls.length
             if (toolCalls.length > 0) {
               const lastToolCall = toolCalls[toolCalls.length - 1].created_at
               if (!existing.lastAt || lastToolCall > existing.lastAt) {
@@ -215,6 +254,8 @@ export class RoadAggregator {
         packetCount: data.count,
         roadLevel: computeRoadLevel(data.count),
         lastPacketAt: data.lastAt,
+        packetsPerHour: data.hourCount,
+        queueDepth: data.pendingCount,
       })
     }
 
@@ -234,6 +275,8 @@ export class RoadAggregator {
       packet_count: r.packetCount,
       road_level: r.roadLevel,
       last_packet_at: r.lastPacketAt,
+      packets_per_hour: r.packetsPerHour,
+      queue_depth: r.queueDepth,
       period: 'daily',
       period_start: periodStart,
     }))
