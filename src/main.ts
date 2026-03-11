@@ -37,6 +37,7 @@ import {
 import { createSessionAPI, type SessionAPI } from './api'
 import { GameState } from './game/GameState'
 import { CombatAnimator } from './game/CombatAnimator'
+import { ComboTracker } from './game/ComboTracker'
 import { MovementManager } from './game/MovementManager'
 import { handleBattlefieldEvent, type BattlefieldHandlerDeps } from './events/handlers/battlefieldHandlers'
 import type {
@@ -107,6 +108,7 @@ let eventClient: EventClient
 // Game systems (Phase B+C)
 let gameState: GameState
 let combatAnimator: CombatAnimator
+let comboTracker: ComboTracker
 let movementManager: MovementManager
 let battlefieldDeps: BattlefieldHandlerDeps
 let territoryStateManager: TerritoryStateManager
@@ -180,6 +182,7 @@ async function init() {
   // 2. Initialize game systems
   gameState = new GameState()
   combatAnimator = new CombatAnimator(battlefield)
+  comboTracker = new ComboTracker()
   movementManager = new MovementManager(gameState, battlefield)
 
   // Phase 1 systems
@@ -307,6 +310,7 @@ async function init() {
   battlefieldDeps = {
     gameState,
     combatAnimator,
+    comboTracker,
     movementManager,
     battlefield,
     findUnitBySessionId,

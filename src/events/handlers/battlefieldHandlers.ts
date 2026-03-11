@@ -7,6 +7,7 @@
 
 import type { GameState } from '../../game/GameState'
 import type { CombatAnimator } from '../../game/CombatAnimator'
+import type { ComboTracker } from '../../game/ComboTracker'
 import type { MovementManager } from '../../game/MovementManager'
 import type { BattlefieldRenderer } from '../../renderer/BattlefieldRenderer'
 import type { TerritoryId } from '../../renderer/TerritoryRenderer'
@@ -87,6 +88,7 @@ function detectTerritoryFromEvent(event: ClaudeEvent): TerritoryId {
 export interface BattlefieldHandlerDeps {
   gameState: GameState
   combatAnimator: CombatAnimator
+  comboTracker: ComboTracker
   movementManager: MovementManager
   battlefield: BattlefieldRenderer
   findUnitBySessionId: (claudeSessionId: string) => any
@@ -101,6 +103,7 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
   const {
     gameState,
     combatAnimator,
+    comboTracker,
     movementManager,
     battlefield,
     findUnitBySessionId,
@@ -141,6 +144,27 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
 
       // Play result animation
       combatAnimator.playResultAnimation(unit.worldX, unit.worldY, e.success)
+
+      // Combo tracking
+      if (e.success) {
+        const result = comboTracker.recordToolComplete(event.sessionId)
+        if (result) {
+          const { count, tierInfo } = result
+          // Build label: "COMBO x3", "STREAK x6", "RAMPAGE x10!"
+          const suffix = tierInfo.tier === 'rampage' ? '!' : ''
+          const label = `${tierInfo.label} x${count}${suffix}`
+          unit.showCombo(label, tierInfo.color)
+          // Particle burst scaled to tier
+          battlefield.particleSystem.burst(
+            unit.worldX, unit.worldY,
+            tierInfo.color,
+            tierInfo.particleCount
+          )
+        }
+      } else {
+        // Error resets combo
+        comboTracker.resetCombo(event.sessionId)
+      }
       break
     }
 
@@ -156,6 +180,9 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
 
       // Completion effect
       combatAnimator.playCompletionEffect(unit.worldX, unit.worldY)
+
+      // Reset combo on session stop
+      comboTracker.resetCombo(event.sessionId)
       break
     }
 
@@ -184,6 +211,9 @@ export function handleBattlefieldEvent(event: ClaudeEvent, deps: BattlefieldHand
 
       // Dissolve effect
       combatAnimator.playDissolve(unit.worldX, unit.worldY)
+
+      // Clean up combo state
+      comboTracker.resetCombo(event.sessionId)
       break
     }
   }

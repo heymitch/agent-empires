@@ -65,6 +65,12 @@ export class UnitRenderer {
   private modelLabel: Text
   private createdAt: number
 
+  // Combo display
+  private comboText: Text | null = null
+  private comboElapsed = 0
+  private comboDuration = 1.5
+  private comboStartY = 0
+
   // Animation state
   private pulsePhase = 0
   private pulseSpeed = 1.5
@@ -278,6 +284,44 @@ export class UnitRenderer {
     this.toolText.text = tool ? `[${tool}]` : ''
   }
 
+  /**
+   * Show a floating combo label above the unit that fades up and out over 1.5s.
+   * e.g. "COMBO x3", "STREAK x6", "RAMPAGE x10!"
+   */
+  showCombo(label: string, color: number): void {
+    // Remove previous combo text if still animating
+    if (this.comboText) {
+      this.container.removeChild(this.comboText)
+      this.comboText.destroy()
+      this.comboText = null
+    }
+
+    const cfg = CLASS_CONFIG[this._unitClass]
+    const style = new TextStyle({
+      fontFamily: 'Orbitron, JetBrains Mono, monospace',
+      fontSize: 16,
+      fill: color,
+      fontWeight: 'bold',
+      stroke: { color: 0x000000, width: 3 },
+      dropShadow: {
+        color: color,
+        blur: 6,
+        alpha: 0.4,
+        distance: 0,
+      },
+    })
+
+    this.comboText = new Text({ text: label, style })
+    this.comboText.anchor.set(0.5, 1)
+    this.comboStartY = -(cfg.radius + 50)
+    this.comboText.y = this.comboStartY
+    this.comboText.alpha = 1
+    this.comboText.scale.set(1.2) // Pop in slightly larger
+    this.comboElapsed = 0
+    this.comboDuration = 1.5
+    this.container.addChild(this.comboText)
+  }
+
   get status(): UnitStatus {
     return this._status
   }
@@ -390,6 +434,25 @@ export class UnitRenderer {
         this.container.alpha = scale * 0.8
       }
       return // skip all other animations during collapse
+    }
+
+    // Combo text float-up animation
+    if (this.comboText) {
+      this.comboElapsed += dt
+      const t = Math.min(1, this.comboElapsed / this.comboDuration)
+      // Float upward 40px over the duration
+      this.comboText.y = this.comboStartY - t * 40
+      // Ease-out fade: holds for first 40%, then fades
+      this.comboText.alpha = t < 0.4 ? 1 : 1 - ((t - 0.4) / 0.6)
+      // Scale: pops in at 1.2, settles to 1.0 quickly, then shrinks slightly
+      const scaleT = t < 0.1 ? 1.2 - (t / 0.1) * 0.2 : 1.0 - (t - 0.1) * 0.1
+      this.comboText.scale.set(Math.max(0.8, scaleT))
+
+      if (t >= 1) {
+        this.container.removeChild(this.comboText)
+        this.comboText.destroy()
+        this.comboText = null
+      }
     }
 
     // Pulse animation
