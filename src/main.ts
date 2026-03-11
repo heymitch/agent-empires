@@ -250,8 +250,13 @@ async function init() {
     // Update production chain particle animations
     productionChainRenderer.update(dt)
 
-    // Update threat pulses
-    threatRenderer.update(dt * 1000) // ThreatRenderer expects ms
+    // Update threat pulses + enemy AI movement
+    const unitPositions = Array.from(gameState.getAllUnits()).map((u) => ({
+      id: u.sessionId,
+      x: u.position.x,
+      y: u.position.y,
+    }))
+    threatRenderer.update(dt * 1000, unitPositions) // ThreatRenderer expects ms
 
     // Tick territory state manager every ~1s (using frame accumulator)
     if (Math.floor(battlefield.app.ticker.lastTime / 1000) !== Math.floor((battlefield.app.ticker.lastTime - battlefield.app.ticker.deltaMS) / 1000)) {
@@ -747,7 +752,7 @@ function handleSessionList(sessionList: ManagedSession[]) {
   for (const id of currentIds) {
     if (!newIds.has(id)) {
       const unit = battlefield.getUnit(id)
-      if (unit && !unit.isRetiring) {
+      if (unit && !unit.isRetiring && !unit.isCollapsing) {
         unit.retire()
         // Remove after animation completes
         setTimeout(() => {
@@ -868,6 +873,17 @@ function ensureUnit(session: ManagedSession) {
     const health = 1 - (session.tokens.current / 200000)
     unit.setHealth(Math.max(0, Math.min(1, health)))
     gameState.updateUnitHealth(session.id, health * 100)
+
+    // Context exhaustion: trigger collapse when health hits 0
+    if (health <= 0 && !unit.isCollapsing && !unit.isRetiring) {
+      unit.collapse()
+      battlefield.particleSystem.burst(unit.worldX, unit.worldY, 0xE8682A, 18)
+      // Remove after collapse animation completes
+      setTimeout(() => {
+        battlefield.removeUnit(session.id)
+        gameState.removeUnit(session.id)
+      }, 1600)
+    }
   }
 }
 

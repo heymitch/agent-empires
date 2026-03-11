@@ -71,6 +71,9 @@ export class UnitRenderer {
   private _retiring = false
   private _retireElapsed = 0
   private _retireDuration = 0.5 // 500ms shrink-to-zero
+  private _collapsing = false
+  private _collapseElapsed = 0
+  private _collapseDuration = 1.5 // 1500ms context exhaustion animation
 
   constructor(id: string, name: string, territory: TerritoryId = 'hq', unitClass: UnitClass = 'command') {
     this.id = id
@@ -353,6 +356,42 @@ export class UnitRenderer {
       return // skip all other animations during retirement
     }
 
+    // Context exhaustion collapse animation (3-phase, 1.5s)
+    if (this._collapsing) {
+      this._collapseElapsed += dt
+      const elapsed = this._collapseElapsed
+      const cfg = CLASS_CONFIG[this._unitClass]
+
+      if (elapsed < 0.5) {
+        // Phase 1 (0-0.5s): Rapid flicker
+        const flickerCycle = Math.floor(elapsed / 0.05) % 2
+        this.container.alpha = flickerCycle === 0 ? 0.3 : 1.0
+      } else if (elapsed < 1.0) {
+        // Phase 2 (0.5-1.0s): Turn red-orange, ring expands outward
+        this.container.alpha = 1.0
+        const phase2T = (elapsed - 0.5) / 0.5
+        // Tint body red-orange by redrawing status ring with collapse color
+        this.statusRing.clear()
+        const expandRadius = cfg.radius + 6 + phase2T * 20
+        this.statusRing.circle(0, 0, expandRadius).stroke({
+          width: cfg.ringWidth + phase2T * 3,
+          color: 0xE8682A,
+          alpha: 1.0 - phase2T * 0.3,
+        })
+        // Red-orange overlay on body
+        this.body.alpha = 1.0 - phase2T * 0.2
+        this.body.tint = this._lerpColor(0xFFFFFF, 0xE8682A, phase2T)
+      } else {
+        // Phase 3 (1.0-1.5s): Shrink inward and fade to zero (burst-style)
+        const phase3T = Math.min(1, (elapsed - 1.0) / 0.5)
+        const eased = phase3T * phase3T // ease-in
+        const scale = 1 - eased
+        this.container.scale.set(scale)
+        this.container.alpha = scale * 0.8
+      }
+      return // skip all other animations during collapse
+    }
+
     // Pulse animation
     this.pulsePhase += dt * this.pulseSpeed * Math.PI * 2
     if (this.pulsePhase > Math.PI * 2) this.pulsePhase -= Math.PI * 2
@@ -388,6 +427,30 @@ export class UnitRenderer {
 
   get retireComplete(): boolean {
     return this._retiring && this._retireElapsed >= this._retireDuration
+  }
+
+  /** Start context exhaustion collapse animation (3-phase, 1.5s). */
+  collapse(): void {
+    this._collapsing = true
+    this._collapseElapsed = 0
+  }
+
+  get isCollapsing(): boolean {
+    return this._collapsing
+  }
+
+  get collapseComplete(): boolean {
+    return this._collapsing && this._collapseElapsed >= this._collapseDuration
+  }
+
+  /** Linearly interpolate between two hex colors. */
+  private _lerpColor(from: number, to: number, t: number): number {
+    const r1 = (from >> 16) & 0xFF, g1 = (from >> 8) & 0xFF, b1 = from & 0xFF
+    const r2 = (to >> 16) & 0xFF, g2 = (to >> 8) & 0xFF, b2 = to & 0xFF
+    const r = Math.round(r1 + (r2 - r1) * t)
+    const g = Math.round(g1 + (g2 - g1) * t)
+    const b = Math.round(b1 + (b2 - b1) * t)
+    return (r << 16) | (g << 8) | b
   }
 
   destroy(): void {
