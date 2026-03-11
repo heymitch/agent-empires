@@ -7,7 +7,7 @@
 import type { TerritoryId } from '../renderer/TerritoryRenderer'
 import type { ManagedSession } from '../../shared/types'
 
-export type GameUnitStatus = 'idle' | 'marching' | 'working' | 'thinking' | 'offline'
+export type GameUnitStatus = 'idle' | 'marching' | 'working' | 'thinking' | 'combat' | 'exhausted' | 'offline'
 
 export interface UnitState {
   sessionId: string

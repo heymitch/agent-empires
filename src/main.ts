@@ -157,6 +157,8 @@ function sessionStatusToUnitStatus(status: SessionStatus): UnitStatus {
     case 'idle': return 'idle'
     case 'working': return 'working'
     case 'waiting': return 'thinking'
+    case 'combat': return 'combat'
+    case 'exhausted': return 'exhausted'
     case 'offline': return 'offline'
     default: return 'idle'
   }
@@ -712,6 +714,11 @@ function setupEventClient() {
     } else if ((msg as any).type === 'packet') {
       const pktConfig = (msg as any).payload as PacketConfig
       packetManager.spawnPacket(pktConfig)
+    } else if ((msg as any).type === 'queue_update') {
+      const queues = (msg as any).payload.queues as Record<string, number>
+      for (const [territory, count] of Object.entries(queues)) {
+        roadRenderer.setQueueCount(territory, count)
+      }
     } else if ((msg as any).type === 'objectives') {
       objectiveRenderer.updateObjectives((msg as any).payload as ObjectiveData[])
     } else if ((msg as any).type === 'production') {

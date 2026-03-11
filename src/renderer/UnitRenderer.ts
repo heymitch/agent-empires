@@ -12,7 +12,7 @@
 import { Container, Graphics, Text, TextStyle, Circle } from 'pixi.js'
 import type { TerritoryId } from './TerrainRenderer'
 
-export type UnitStatus = 'idle' | 'working' | 'thinking' | 'offline'
+export type UnitStatus = 'idle' | 'working' | 'thinking' | 'combat' | 'exhausted' | 'offline'
 export type UnitClass = 'command' | 'operations' | 'recon'
 
 const CLASS_CONFIG: Record<UnitClass, { radius: number; accent: number; ringWidth: number; healthBarWidth: number }> = {
@@ -25,6 +25,8 @@ const STATUS_COLORS: Record<UnitStatus, number> = {
   idle: 0x82C896,      // phosphor green (was 0x33ff77)
   working: 0xE8682A,   // warm orange (was 0x00ffcc)
   thinking: 0x4A9DB8,  // teal (was 0x7b68ee)
+  combat: 0xCC3333,    // military red — actively fighting an objective
+  exhausted: 0x8B7355, // faded tan — working too long without rest
   offline: 0xB4A690,   // cream-dim (was 0xff3366 — red was too aggressive for offline)
 }
 
@@ -239,7 +241,16 @@ export class UnitRenderer {
 
   setStatus(status: UnitStatus): void {
     this._status = status
-    this.pulseSpeed = status === 'working' ? 4.0 : 1.5
+    // Pulse speed per status: combat is rapid, exhausted is slow/tired, offline is static
+    const pulseSpeedMap: Record<UnitStatus, number> = {
+      idle: 1.5,
+      working: 4.0,
+      thinking: 2.5,
+      combat: 6.0,
+      exhausted: 0.8,
+      offline: 0,
+    }
+    this.pulseSpeed = pulseSpeedMap[status]
   }
 
   setHealth(value: number): void {

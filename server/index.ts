@@ -45,6 +45,7 @@ import { RoadAggregator } from './RoadAggregator.js'
 import { ObjectiveManager } from './ObjectiveManager.js'
 import { ProductionDataManager } from './ProductionDataManager.js'
 import { HandoffListener } from './HandoffListener.js'
+import { MonitorOrchestrator } from './monitors/orchestrator.js'
 
 // Supabase persistence (initialized in startServer if env vars present)
 let persistence: SupabasePersistence | null = null
@@ -57,6 +58,9 @@ let productionManager: ProductionDataManager | null = null
 
 // Handoff listener (Realtime subscription — initialized in main if env vars present)
 let handoffListener: HandoffListener | null = null
+
+// Monitor orchestrator (PRD 04 — autonomous monitoring)
+let monitorOrchestrator: MonitorOrchestrator | null = null
 
 // ============================================================================
 // Version (read from package.json)
@@ -136,6 +140,12 @@ const TILES_FILE = resolve(expandHome(process.env.VIBECRAFT_TILES_FILE ?? '~/.vi
 
 /** Time before a "working" session auto-transitions to idle (failsafe for missed events) */
 const WORKING_TIMEOUT_MS = 120_000 // 2 minutes
+
+/** Time before a continuously-working session transitions to 'exhausted' (2 hours) */
+const EXHAUSTED_THRESHOLD_MS = 2 * 60 * 60 * 1000 // 2 hours
+
+/** Track when each session started its current continuous work period */
+const sessionWorkStart: Map<string, number> = new Map()
 
 /** Maximum request body size (1MB) - prevents DoS via memory exhaustion */
 const MAX_BODY_SIZE = 1024 * 1024
@@ -1057,14 +1067,31 @@ function checkWorkingTimeout(): void {
   let changed = false
 
   for (const session of managedSessions.values()) {
-    if (session.status === 'working') {
+    if (session.status === 'working' || session.status === 'combat') {
       const timeSinceActivity = now - session.lastActivity
-      if (timeSinceActivity > WORKING_TIMEOUT_MS) {
+
+      // Check for exhaustion: continuously working for >2 hours
+      const workStart = sessionWorkStart.get(session.id)
+      if (workStart && (now - workStart) > EXHAUSTED_THRESHOLD_MS) {
+        log(`Session "${session.name}" exhausted after ${Math.round((now - workStart) / 60000)}min of continuous work`)
+        session.status = 'exhausted'
+        changed = true
+        continue
+      }
+
+      // Existing failsafe: no activity for 2 min → idle
+      if (session.status === 'working' && timeSinceActivity > WORKING_TIMEOUT_MS) {
         log(`Session "${session.name}" timed out after ${Math.round(timeSinceActivity / 1000)}s of no activity`)
         session.status = 'idle'
         session.currentTool = undefined
+        sessionWorkStart.delete(session.id)
         changed = true
       }
+    }
+
+    // Clear work start tracker when session goes idle or offline
+    if (session.status === 'idle' || session.status === 'offline') {
+      sessionWorkStart.delete(session.id)
     }
   }
 
@@ -1493,8 +1520,15 @@ function addEvent(event: ClaudeEvent) {
     // Update status based on event type
     switch (event.type) {
       case 'pre_tool_use':
-        managedSession.status = 'working'
+        // Only override combat with working if not currently in combat (combat is sticky until objective completes)
+        if (managedSession.status !== 'combat') {
+          managedSession.status = 'working'
+        }
         managedSession.currentTool = (event as PreToolUseEvent).tool
+        // Track when continuous work started
+        if (!sessionWorkStart.has(managedSession.id)) {
+          sessionWorkStart.set(managedSession.id, Date.now())
+        }
 
         // Virtual sub-agent: when parent fires an Agent tool, spawn a temporary unit
         if ((event as PreToolUseEvent).tool === 'Agent') {
@@ -1557,6 +1591,7 @@ function addEvent(event: ClaudeEvent) {
       case 'session_end':
         managedSession.status = 'idle'
         managedSession.currentTool = undefined
+        sessionWorkStart.delete(managedSession.id)
         break
     }
 
@@ -2700,6 +2735,18 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
           const assignment = await objectiveManager!.assignAgent(objectiveId, session_id)
           if (assignment) {
             log(`[Objectives] Assigned session ${session_id.slice(0, 8)} to objective ${objectiveId.slice(0, 8)}`)
+
+            // Transition session to 'combat' status when assigned to an objective
+            const combatSession = managedSessions.get(session_id) || findManagedSession(session_id)
+            if (combatSession && combatSession.status !== 'offline') {
+              combatSession.status = 'combat'
+              combatSession.lastActivity = Date.now()
+              sessionWorkStart.set(combatSession.id, Date.now())
+              broadcastSessions()
+              saveSessions()
+              log(`[Status] Session ${combatSession.name} → combat (assigned to objective)`)
+            }
+
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ ok: true, assignment }))
           } else {
@@ -3031,6 +3078,33 @@ function main() {
     })
     handoffListener.start()
     log('[HandoffListener] Initialized and listening for handoffs')
+
+    // Queue depth polling — count pending handoffs per territory every 30s
+    const pollQueueDepth = async () => {
+      try {
+        const res = await fetch(
+          `${supabaseUrl}/rest/v1/ae_handoffs?select=to_territory&or=(status.is.null,status.eq.pending)`,
+          {
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+          }
+        )
+        if (!res.ok) return
+        const rows = await res.json() as { to_territory: string }[]
+        const queues: Record<string, number> = {}
+        for (const row of rows) {
+          queues[row.to_territory] = (queues[row.to_territory] ?? 0) + 1
+        }
+        broadcast({ type: 'queue_update', payload: { queues } } as any)
+      } catch {
+        // Silently skip — Supabase may not have ae_handoffs table yet
+      }
+    }
+    pollQueueDepth()
+    setInterval(pollQueueDepth, 30_000)
+    log('[QueueDepth] Polling ae_handoffs every 30s')
   } else {
     log('[Persistence] Skipped — SUPABASE_URL or SUPABASE_KEY not set')
   }
@@ -3193,6 +3267,14 @@ function main() {
 
     // Run initial health check to update session statuses
     checkSessionHealth()
+
+    // Start monitor orchestrator (PRD 04 — autonomous monitoring)
+    monitorOrchestrator = new MonitorOrchestrator({
+      getSessions,
+      broadcast,
+      pollIntervalMs: 30_000,
+    })
+    monitorOrchestrator.start()
   })
 }
 

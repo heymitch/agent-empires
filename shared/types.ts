@@ -194,6 +194,8 @@ export type ServerMessage =
   | { type: 'objectives'; payload: unknown[] }
   | { type: 'production'; payload: unknown }
   | { type: 'packet'; payload: PacketConfig }
+  | { type: 'queue_update'; payload: { queues: Record<string, number> } }
+  | { type: 'monitor'; payload: { heartbeats: Record<string, unknown>; revenue: { mrr: number; transactions: unknown[] }; support: { openTickets: number; urgentCount: number } } }
 
 /** Client -> Server messages */
 export type ClientMessage =
@@ -289,7 +291,7 @@ export interface TaskToolInput {
 // ============================================================================
 
 /** Status of a managed Claude session */
-export type SessionStatus = 'idle' | 'working' | 'waiting' | 'offline'
+export type SessionStatus = 'idle' | 'working' | 'waiting' | 'combat' | 'exhausted' | 'offline'
 
 /** A managed Claude session */
 export interface ManagedSession {

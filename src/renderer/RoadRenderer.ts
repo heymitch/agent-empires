@@ -97,10 +97,12 @@ export class RoadRenderer {
 
   private roadGraphics: Graphics
   private dotGraphics: Graphics
+  private queueGraphics: Graphics
   private hitContainer: Container
 
   private roads: RoadState[] = []
   private elapsed = 0
+  private queueCounts: Map<string, number> = new Map()
 
   private tooltip: HTMLDivElement | null = null
   private hoveredRoad: RoadState | null = null
@@ -114,10 +116,12 @@ export class RoadRenderer {
 
     this.roadGraphics = new Graphics()
     this.dotGraphics = new Graphics()
+    this.queueGraphics = new Graphics()
     this.hitContainer = new Container()
 
     this.layer.addChild(this.roadGraphics)
     this.layer.addChild(this.dotGraphics)
+    this.layer.addChild(this.queueGraphics)
     this.layer.addChild(this.hitContainer)
 
     this.createTooltip()
@@ -145,6 +149,14 @@ export class RoadRenderer {
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
+
+  setQueueCount(territory: string, count: number): void {
+    if (count <= 0) {
+      this.queueCounts.delete(territory)
+    } else {
+      this.queueCounts.set(territory, count)
+    }
+  }
 
   updateRoads(roads: RoadData[]): void {
     this.roads = []
@@ -205,6 +217,7 @@ export class RoadRenderer {
   update(dt: number): void {
     this.elapsed += dt
     this.drawDots()
+    this.drawQueueIndicators()
   }
 
   // ── Hit areas & tooltip ─────────────────────────────────────────────────────
@@ -302,7 +315,8 @@ export class RoadRenderer {
 
     for (const road of this.roads) {
       const width = LINE_WIDTHS[road.level] ?? 1
-      const color = ROAD_COLORS[road.level] ?? 0x2A2118
+      const destQueue = this.queueCounts.get(road.to) ?? 0
+      const color = destQueue > 10 ? 0xCC3333 : (ROAD_COLORS[road.level] ?? 0x2A2118)
       const alpha = ROAD_ALPHA[road.level] ?? 0.3
 
       // Level 5 outer glow pass
@@ -365,6 +379,82 @@ export class RoadRenderer {
     }
   }
 
+  // ── Queue indicators ───────────────────────────────────────────────────────
+
+  private drawQueueIndicators(): void {
+    const g = this.queueGraphics
+    g.clear()
+
+    // Track which destinations we've already drawn (avoid duplicate stacks)
+    const drawn = new Set<string>()
+
+    for (const road of this.roads) {
+      const count = this.queueCounts.get(road.to) ?? 0
+      if (count <= 0 || drawn.has(road.to)) continue
+      drawn.add(road.to)
+
+      // Stack dots above the destination endpoint
+      const dotCount = Math.min(count, 5)
+      const baseColor = ROAD_COLORS[road.level] ?? 0xB4A690
+      // Brighten the road color for queue dots
+      const r = Math.min(255, ((baseColor >> 16) & 0xFF) + 60)
+      const gC = Math.min(255, ((baseColor >> 8) & 0xFF) + 60)
+      const b = Math.min(255, (baseColor & 0xFF) + 60)
+      const brightColor = (r << 16) | (gC << 8) | b
+
+      const QUEUE_DOT_RADIUS = 4
+      const QUEUE_DOT_SPACING = 11
+
+      for (let i = 0; i < dotCount; i++) {
+        const x = road.tx
+        const y = road.ty - (i + 1) * QUEUE_DOT_SPACING
+        g.circle(x, y, QUEUE_DOT_RADIUS).fill({ color: brightColor, alpha: 0.85 })
+      }
+
+      // If queue > 5, show count label
+      if (count > 5) {
+        const labelY = road.ty - (dotCount + 1) * QUEUE_DOT_SPACING
+        // Draw a small background pill
+        const labelText = `${count}`
+        // Use Graphics text via a sibling Text node (we'll draw a marker and rely on the count label)
+        g.circle(road.tx, labelY, 8).fill({ color: 0x0A0806, alpha: 0.8 })
+        g.circle(road.tx, labelY, 8).stroke({ color: brightColor, width: 1, alpha: 0.6 })
+
+        // Check if we already have a text label for this territory
+        const existingLabel = this.layer.children.find(
+          (c) => c.label === `queue-label-${road.to}`
+        )
+        if (existingLabel) {
+          (existingLabel as Text).text = labelText;
+          (existingLabel as Text).position.set(road.tx, labelY)
+        } else {
+          const text = new Text({
+            text: labelText,
+            style: new TextStyle({
+              fontFamily: '"JetBrains Mono", "Courier New", monospace',
+              fontSize: 10,
+              fill: brightColor,
+              align: 'center',
+            }),
+          })
+          text.anchor.set(0.5, 0.5)
+          text.position.set(road.tx, labelY)
+          text.label = `queue-label-${road.to}`
+          this.layer.addChild(text)
+        }
+      } else {
+        // Remove label if count dropped to <= 5
+        const existingLabel = this.layer.children.find(
+          (c) => c.label === `queue-label-${road.to}`
+        )
+        if (existingLabel) {
+          this.layer.removeChild(existingLabel)
+          existingLabel.destroy()
+        }
+      }
+    }
+  }
+
   // ── Bezier helpers ──────────────────────────────────────────────────────────
 
   private evalQuadBezier(
@@ -408,6 +498,14 @@ export class RoadRenderer {
   destroy(): void {
     this.roadGraphics.destroy()
     this.dotGraphics.destroy()
+    this.queueGraphics.destroy()
+    // Remove queue labels
+    for (const child of [...this.layer.children]) {
+      if (typeof child.label === 'string' && child.label.startsWith('queue-label-')) {
+        this.layer.removeChild(child)
+        child.destroy()
+      }
+    }
     this.hitContainer.destroy({ children: true })
     if (this.tooltip) {
       this.tooltip.remove()

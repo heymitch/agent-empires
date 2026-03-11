@@ -14,7 +14,7 @@
 > - [x] **CombatAnimator (tool-use animations)** — `src/game/CombatAnimator.ts`
 > - [x] **Connection line renderer** — `src/renderer/ConnectionLineRenderer.ts`
 > - [ ] **Prime/Commander session formal designation (PrimeSessionResolver)** — partial (SkillRegistry references commander but no formal resolver)
-> - [ ] **Unit status lifecycle (idle/working/combat/exhausted/dead)** — not fully implemented per spec
+> - [x] **Unit status lifecycle (idle/working/combat/exhausted/offline)** — 6 states with distinct colors, pulse speeds, and server-side transitions
 > - [ ] **Context exhaustion / unit collapse animation** — not implemented
 > - [ ] **Loot orb return from sub-agents** — not implemented
 > - [ ] **Deploy animation with portal circle** — not implemented
