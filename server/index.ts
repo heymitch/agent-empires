@@ -2610,24 +2610,71 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
           return
         }
 
-        // Parse unchecked tasks: lines matching "- [ ] **text**" or "- [ ] text"
+        // Parse unchecked tasks from markdown with enhanced patterns
         const lines = content.split('\n')
-        const tasks: Array<{ name: string; section: string }> = []
+        const tasks: Array<{ name: string; section: string; priority: number; territoryHint: string | null }> = []
         let currentSection = 'General'
 
         for (const line of lines) {
           // Track section headings
           const headingMatch = line.match(/^#{1,3}\s+(.+)/)
-          if (headingMatch) currentSection = headingMatch[1].trim()
+          if (headingMatch) {
+            currentSection = headingMatch[1].trim()
+            continue
+          }
 
-          // Match unchecked tasks
-          const taskMatch = line.match(/^[-*]\s+\[ \]\s+\*\*(.+?)\*\*(.*)$/) ||
-                           line.match(/^[-*]\s+\[ \]\s+(.+)$/)
-          if (taskMatch) {
-            const name = taskMatch[1].replace(/\*\*/g, '').trim()
-            if (name.length > 3 && name !== 'STOP') {
-              tasks.push({ name, section: currentSection })
+          let rawName: string | null = null
+
+          // Pattern 1: Bullet unchecked "- [ ] **bold text**" or "* [ ] **bold text**"
+          const boldMatch = line.match(/^[-*]\s+\[ \]\s+\*\*(.+?)\*\*(.*)$/)
+          if (boldMatch) {
+            rawName = boldMatch[1].trim()
+          }
+
+          // Pattern 2: Plain bullet "- [ ] task text" or "* [ ] task text"
+          if (!rawName) {
+            const plainMatch = line.match(/^[-*]\s+\[ \]\s+(.+)$/)
+            if (plainMatch) {
+              rawName = plainMatch[1].replace(/\*\*/g, '').trim()
             }
+          }
+
+          // Pattern 3: Numbered "1. [ ] task text"
+          if (!rawName) {
+            const numberedMatch = line.match(/^\d+\.\s+\[ \]\s+(.+)$/)
+            if (numberedMatch) {
+              rawName = numberedMatch[1].replace(/\*\*/g, '').trim()
+            }
+          }
+
+          if (!rawName || rawName.length <= 3 || rawName === 'STOP') continue
+
+          // Extract priority from ! markers at start or end
+          let priority = 3
+          const bangMatch = rawName.match(/^(!{1,3})\s*/)
+          if (bangMatch) {
+            const bangs = bangMatch[1].length
+            priority = bangs === 3 ? 10 : bangs === 2 ? 7 : 5
+            rawName = rawName.slice(bangMatch[0].length)
+          } else {
+            const trailingBang = rawName.match(/\s*(!{1,3})$/)
+            if (trailingBang) {
+              const bangs = trailingBang[1].length
+              priority = bangs === 3 ? 10 : bangs === 2 ? 7 : 5
+              rawName = rawName.slice(0, -trailingBang[0].length)
+            }
+          }
+
+          // Extract territory hint from brackets: [sales], [fulfillment], etc.
+          let territoryHint: string | null = null
+          const bracketMatch = rawName.match(/\[([a-zA-Z-]+)\]\s*/)
+          if (bracketMatch) {
+            territoryHint = bracketMatch[1].toLowerCase()
+            rawName = rawName.replace(bracketMatch[0], '').trim()
+          }
+
+          if (rawName.length > 3) {
+            tasks.push({ name: rawName, section: currentSection, priority, territoryHint })
           }
         }
 
@@ -2637,14 +2684,20 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
           return
         }
 
-        // Map sections to territories heuristically
-        const sectionToTerritory = (section: string): string => {
-          const s = section.toLowerCase()
-          if (s.includes('lead') || s.includes('marketing') || s.includes('content')) return 'lead-gen'
-          if (s.includes('sales') || s.includes('pipeline') || s.includes('checkout')) return 'sales'
-          if (s.includes('fulfillment') || s.includes('deliver') || s.includes('bootcamp') || s.includes('product')) return 'fulfillment'
-          if (s.includes('support') || s.includes('ticket')) return 'support'
-          if (s.includes('retention') || s.includes('churn')) return 'retention'
+        // Map sections/text to territories heuristically
+        const detectTaskTerritory = (section: string, taskName: string, hint: string | null): string => {
+          // Explicit hint takes priority
+          if (hint) {
+            const validTerritories = ['lead-gen', 'sales', 'fulfillment', 'support', 'retention', 'content', 'home', 'hq']
+            if (validTerritories.includes(hint)) return hint
+          }
+          const s = (section + ' ' + taskName).toLowerCase()
+          if (s.includes('lead') || s.includes('marketing') || s.includes('ad ') || s.includes('funnel')) return 'lead-gen'
+          if (s.includes('sale') || s.includes('pipeline') || s.includes('checkout') || s.includes('prospect') || s.includes('deal')) return 'sales'
+          if (s.includes('fulfill') || s.includes('deliver') || s.includes('bootcamp') || s.includes('product') || s.includes('ship') || s.includes('build')) return 'fulfillment'
+          if (s.includes('support') || s.includes('ticket') || s.includes('bug') || s.includes('fix')) return 'support'
+          if (s.includes('retain') || s.includes('churn') || s.includes('renew')) return 'retention'
+          if (s.includes('content') || s.includes('post') || s.includes('newsletter') || s.includes('write')) return 'content'
           return territory || 'hq'
         }
 
@@ -2652,15 +2705,15 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
         for (const task of tasks) {
           const obj = await objectiveManager!.createObjective({
             name: task.name,
-            territory: sectionToTerritory(task.section),
+            territory: detectTaskTerritory(task.section, task.name, task.territoryHint),
             hp_total: Math.max(1, Math.ceil(task.name.length / 15)), // rough sizing: longer names = bigger tasks
             campaign_id: campaign || undefined,
-            priority: 3,
+            priority: task.priority,
             metadata: { source: 'scratchpad', section: task.section, filePath: targetPath },
           })
           if (obj) {
             created.push(obj)
-            log(`[Objectives/Scratchpad] Created: "${obj.name}" in ${obj.territory} (HP: ${obj.hp_total})`)
+            log(`[Objectives/Scratchpad] Created: "${obj.name}" in ${obj.territory} (HP: ${obj.hp_total}, P${task.priority})`)
           }
         }
 
@@ -2676,8 +2729,152 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
     return
   }
 
-  // Objective-specific endpoints: /objectives/:id/(hp|status|assign)
-  const objectiveActionMatch = req.url?.match(/^\/objectives\/([a-f0-9-]+)\/(hp|status|assign)$/)
+  // POST /objectives/from-text — extract action items from raw text (meeting notes, transcripts)
+  if (req.method === 'POST' && req.url === '/objectives/from-text') {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized' }))
+      return
+    }
+    collectRequestBody(req).then(async body => {
+      try {
+        const { text, territory, campaign } = JSON.parse(body) as {
+          text?: string
+          territory?: string
+          campaign?: string
+        }
+
+        if (!text || !text.trim()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'text field required' }))
+          return
+        }
+
+        // Action item trigger patterns
+        const actionPatterns = [
+          /\bneed\s+to\b/i,
+          /\bshould\b/i,
+          /\bmust\b/i,
+          /\btodo\b/i,
+          /\baction\s*:/i,
+          /\btask\s*:/i,
+          /\bfollow[\s-]?up\b/i,
+          /\bremember\s+to\b/i,
+          /\bdon'?t\s+forget\b/i,
+          /\bmake\s+sure\b/i,
+          /\blet'?s\b/i,
+          /\bwe\s+(?:need|have)\s+to\b/i,
+        ]
+
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5)
+        const actionItems: string[] = []
+
+        for (const line of lines) {
+          const isAction = actionPatterns.some(p => p.test(line))
+          if (isAction) {
+            // Clean up the line: strip leading bullets, dashes, numbers
+            let cleaned = line.replace(/^[-*•]\s*/, '').replace(/^\d+[.)]\s*/, '').trim()
+            // Strip common prefixes
+            cleaned = cleaned.replace(/^(action|task|todo)\s*:\s*/i, '').trim()
+            if (cleaned.length > 5) {
+              actionItems.push(cleaned)
+            }
+          }
+        }
+
+        if (actionItems.length === 0) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, created: 0, message: 'No action items detected in text' }))
+          return
+        }
+
+        // Detect territory from task text
+        const inferTerritory = (taskName: string): string => {
+          const s = taskName.toLowerCase()
+          if (s.includes('lead') || s.includes('marketing') || s.includes('funnel')) return 'lead-gen'
+          if (s.includes('sale') || s.includes('pipeline') || s.includes('deal') || s.includes('prospect')) return 'sales'
+          if (s.includes('fulfill') || s.includes('deliver') || s.includes('product') || s.includes('ship') || s.includes('build')) return 'fulfillment'
+          if (s.includes('support') || s.includes('ticket') || s.includes('bug')) return 'support'
+          if (s.includes('retain') || s.includes('churn') || s.includes('renew')) return 'retention'
+          if (s.includes('content') || s.includes('post') || s.includes('newsletter')) return 'content'
+          return territory || 'hq'
+        }
+
+        const created: unknown[] = []
+        for (const item of actionItems) {
+          const obj = await objectiveManager!.createObjective({
+            name: item.length > 100 ? item.slice(0, 97) + '...' : item,
+            territory: inferTerritory(item),
+            hp_total: Math.max(1, Math.ceil(item.length / 15)),
+            campaign_id: campaign || undefined,
+            priority: 3,
+            metadata: { source: 'text-extraction' },
+          })
+          if (obj) {
+            created.push(obj)
+            log(`[Objectives/Text] Created: "${obj.name}" in ${obj.territory}`)
+          }
+        }
+
+        log(`[Objectives/Text] Extracted ${actionItems.length} action items, created ${created.length} objectives`)
+        res.writeHead(201, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, extracted: actionItems.length, created: created.length, objectives: created }))
+      } catch (err) {
+        log(`[Objectives/Text] Error: ${err}`)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: String(err) }))
+      }
+    })
+    return
+  }
+
+  // POST /objectives/create — explicit single-objective creation (AbilityBar integration)
+  if (req.method === 'POST' && req.url === '/objectives/create') {
+    if (!objectiveManager) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'Objective system not initialized' }))
+      return
+    }
+    collectRequestBody(req).then(async body => {
+      try {
+        const { name, territory, hp_total, priority } = JSON.parse(body) as {
+          name?: string
+          territory?: string
+          hp_total?: number
+          priority?: number
+        }
+        if (!name) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'name required' }))
+          return
+        }
+        const objective = await objectiveManager!.createObjective({
+          name,
+          territory: territory || 'hq',
+          hp_total: hp_total || Math.max(1, Math.ceil(name.length / 15)),
+          priority: priority ?? 3,
+        })
+        if (objective) {
+          log(`[Objectives/Create] Created: "${objective.name}" in ${objective.territory} (HP: ${objective.hp_total})`)
+          res.writeHead(201, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, objective }))
+        } else {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Failed to create objective' }))
+        }
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+      }
+    }).catch(() => {
+      res.writeHead(413, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Request body too large' }))
+    })
+    return
+  }
+
+  // Objective-specific endpoints: /objectives/:id/(hp|status|assign|assault)
+  const objectiveActionMatch = req.url?.match(/^\/objectives\/([a-f0-9-]+)\/(hp|status|assign|assault)$/)
   if (objectiveActionMatch && objectiveManager) {
     const objectiveId = objectiveActionMatch[1]
     const action = objectiveActionMatch[2]
@@ -2773,6 +2970,50 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
           } else {
             res.writeHead(500, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ ok: false, error: 'Failed to assign agent' }))
+          }
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+        }
+      }).catch(() => {
+        res.writeHead(413, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Request body too large' }))
+      })
+      return
+    }
+
+    // POST /objectives/:id/assault — assign current session to attack objective (AbilityBar)
+    if (req.method === 'POST' && action === 'assault') {
+      collectRequestBody(req).then(async body => {
+        try {
+          const { session_id } = JSON.parse(body) as { session_id: string }
+          if (!session_id) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'session_id required' }))
+            return
+          }
+
+          // Assign via ObjectiveManager
+          const assignment = await objectiveManager!.assignAgent(objectiveId, session_id)
+          if (assignment) {
+            log(`[Objectives/Assault] Session ${session_id.slice(0, 8)} assaulting objective ${objectiveId.slice(0, 8)}`)
+
+            // Transition session to 'combat' status
+            const combatSession = managedSessions.get(session_id) || findManagedSession(session_id)
+            if (combatSession && combatSession.status !== 'offline') {
+              combatSession.status = 'combat'
+              combatSession.lastActivity = Date.now()
+              sessionWorkStart.set(combatSession.id, Date.now())
+              broadcastSessions()
+              saveSessions()
+              log(`[Status] Session ${combatSession.name} → combat (assault on objective)`)
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: true, assignment }))
+          } else {
+            res.writeHead(500, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'Failed to assault objective' }))
           }
         } catch (e) {
           res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -3265,6 +3506,106 @@ function main() {
     })
     objectiveManager.startPolling()
     log('[ObjectiveManager] Initialized and polling')
+
+    // Auto-feed timer: check scratchpad every 5 minutes for new unchecked items
+    const scratchpadAutoFeedPath = process.env.SCRATCHPAD_PATH || resolve(process.env.HOME || '~', 'speakeasy-agent/Scratchpad.md')
+    const AUTOFEED_INTERVAL_MS = 5 * 60 * 1000
+    const autoFeedKnownNames = new Set<string>()
+
+    // Seed known names from existing objectives to avoid duplicates on startup
+    objectiveManager.getObjectives().then(existing => {
+      for (const obj of existing) autoFeedKnownNames.add(obj.name.toLowerCase())
+      log(`[AutoFeed] Seeded ${autoFeedKnownNames.size} known objective names`)
+    })
+
+    setInterval(async () => {
+      if (!objectiveManager) return
+      try {
+        if (!existsSync(scratchpadAutoFeedPath)) return
+
+        const content = readFileSync(scratchpadAutoFeedPath, 'utf-8')
+        const lines = content.split('\n')
+        let currentSection = 'General'
+        let newCount = 0
+
+        for (const line of lines) {
+          const headingMatch = line.match(/^#{1,3}\s+(.+)/)
+          if (headingMatch) {
+            currentSection = headingMatch[1].trim()
+            continue
+          }
+
+          let rawName: string | null = null
+
+          // Same parsing patterns as the endpoint
+          const boldMatch = line.match(/^[-*]\s+\[ \]\s+\*\*(.+?)\*\*(.*)$/)
+          if (boldMatch) rawName = boldMatch[1].trim()
+
+          if (!rawName) {
+            const plainMatch = line.match(/^[-*]\s+\[ \]\s+(.+)$/)
+            if (plainMatch) rawName = plainMatch[1].replace(/\*\*/g, '').trim()
+          }
+
+          if (!rawName) {
+            const numberedMatch = line.match(/^\d+\.\s+\[ \]\s+(.+)$/)
+            if (numberedMatch) rawName = numberedMatch[1].replace(/\*\*/g, '').trim()
+          }
+
+          if (!rawName || rawName.length <= 3 || rawName === 'STOP') continue
+
+          // Strip priority markers for name matching
+          let cleanName = rawName.replace(/^!{1,3}\s*/, '').replace(/\s*!{1,3}$/, '')
+          // Strip territory hints
+          cleanName = cleanName.replace(/\[[a-zA-Z-]+\]\s*/, '').trim()
+
+          if (cleanName.length <= 3) continue
+          if (autoFeedKnownNames.has(cleanName.toLowerCase())) continue
+
+          // Extract priority
+          let priority = 3
+          const bangMatch = rawName.match(/^(!{1,3})\s*/)
+          if (bangMatch) {
+            priority = bangMatch[1].length === 3 ? 10 : bangMatch[1].length === 2 ? 7 : 5
+          } else {
+            const trailingBang = rawName.match(/\s*(!{1,3})$/)
+            if (trailingBang) {
+              priority = trailingBang[1].length === 3 ? 10 : trailingBang[1].length === 2 ? 7 : 5
+            }
+          }
+
+          // Territory detection from text
+          const s = (currentSection + ' ' + cleanName).toLowerCase()
+          let territory = 'hq'
+          if (s.includes('lead') || s.includes('marketing') || s.includes('funnel')) territory = 'lead-gen'
+          else if (s.includes('sale') || s.includes('pipeline') || s.includes('deal')) territory = 'sales'
+          else if (s.includes('fulfill') || s.includes('deliver') || s.includes('product') || s.includes('build')) territory = 'fulfillment'
+          else if (s.includes('support') || s.includes('ticket') || s.includes('bug')) territory = 'support'
+          else if (s.includes('retain') || s.includes('churn')) territory = 'retention'
+          else if (s.includes('content') || s.includes('post') || s.includes('newsletter')) territory = 'content'
+
+          const obj = await objectiveManager!.createObjective({
+            name: cleanName,
+            territory,
+            hp_total: Math.max(1, Math.ceil(cleanName.length / 15)),
+            priority,
+            metadata: { source: 'auto-feed', section: currentSection, filePath: scratchpadAutoFeedPath },
+          })
+
+          if (obj) {
+            autoFeedKnownNames.add(cleanName.toLowerCase())
+            newCount++
+            log(`[AutoFeed] Created: "${obj.name}" in ${obj.territory}`)
+          }
+        }
+
+        if (newCount > 0) {
+          log(`[AutoFeed] Created ${newCount} new objectives from scratchpad`)
+        }
+      } catch (err) {
+        log(`[AutoFeed] Error: ${err}`)
+      }
+    }, AUTOFEED_INTERVAL_MS)
+    log(`[AutoFeed] Scratchpad auto-feed active (${AUTOFEED_INTERVAL_MS / 1000}s interval, path: ${scratchpadAutoFeedPath})`)
 
     // Initialize PaperclipManager (PRD 13 — supply chain integration)
     paperclipManager = new PaperclipManager({ supabaseUrl, supabaseKey })
