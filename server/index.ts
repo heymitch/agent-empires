@@ -3336,12 +3336,32 @@ function main() {
 
     // Start waste detector (PRD 13, Section 6 — downstream consumer detection)
     wasteDetector = new WasteDetector({
-      getRoads: () => latestRoads,
+      getRoads: () => roadAggregator?.getLastRoads() ?? [],
       getSessions,
       broadcast,
       intervalMs: 60_000,
     })
     wasteDetector.start()
+
+    // Start fleet persistence (PRD 12 — battlefield state survives restarts)
+    fleetPersistence = new FleetPersistence({ supabaseUrl, supabaseKey })
+    fleetPersistence.setBroadcast((type, payload) => {
+      broadcast({ type, payload } as any)
+    })
+    // Restore saved state on boot
+    fleetPersistence.restoreAndBroadcast().then((snapshot) => {
+      if (snapshot) {
+        log(`[FleetPersistence] Restored battlefield state from ${snapshot.updated_at ?? 'unknown time'}`)
+      }
+    })
+    // Start auto-save timer
+    fleetPersistence.start(() => ({
+      sessions: getSessions(),
+      roads: roadAggregator?.getLastRoads() ?? [],
+      objectives: objectiveManager?.getLastObjectives() ?? [],
+      threats: [],
+    }))
+    log('[FleetPersistence] Initialized — auto-save every 60s')
   } else {
     log('[ThreatDataBridge] Skipped — SUPABASE_URL or SUPABASE_KEY not set')
   }

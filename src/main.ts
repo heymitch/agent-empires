@@ -737,6 +737,30 @@ function setupEventClient() {
       if (productionChainRenderer.getActiveTerritory() === data.territory) {
         productionChainRenderer.updateData(data)
       }
+    } else if ((msg as any).type === 'fleet_restore') {
+      // PRD 12 — Restore battlefield state from persistence
+      const snapshot = (msg as any).payload as {
+        sessions: ManagedSession[]
+        roads: unknown[]
+        objectives: unknown[]
+        threats: unknown[]
+      }
+      // Restore sessions (same handler as normal session list)
+      if (snapshot.sessions?.length) {
+        handleSessionList(snapshot.sessions)
+        console.log(`[FleetRestore] Restored ${snapshot.sessions.length} sessions`)
+      }
+      // Restore roads
+      if (snapshot.roads?.length) {
+        roadRenderer.updateRoads(snapshot.roads as any)
+        packetManager.updateRoads(snapshot.roads as any)
+        console.log(`[FleetRestore] Restored ${snapshot.roads.length} roads`)
+      }
+      // Restore objectives
+      if (snapshot.objectives?.length) {
+        objectiveRenderer.updateObjectives(snapshot.objectives as ObjectiveData[])
+        console.log(`[FleetRestore] Restored ${snapshot.objectives.length} objectives`)
+      }
     }
   })
 

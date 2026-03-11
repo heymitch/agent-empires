@@ -51,6 +51,7 @@ export class RoadAggregator {
   private onRoadsUpdated: (roads: RoadData[]) => void
 
   private timer: ReturnType<typeof setInterval> | null = null
+  private lastRoads: RoadData[] = []
 
   constructor(config: RoadAggregatorConfig) {
     this.supabaseUrl = config.supabaseUrl
@@ -75,6 +76,10 @@ export class RoadAggregator {
       this.timer = null
       console.log('[RoadAggregator] Stopped')
     }
+  }
+
+  getLastRoads(): RoadData[] {
+    return this.lastRoads
   }
 
   // ── Internal helpers ────────────────────────────────────────────────────────
@@ -133,6 +138,7 @@ export class RoadAggregator {
     try {
       const roads = await this.aggregateRoads()
       await this.persistRoads(roads)
+      this.lastRoads = roads
       this.onRoadsUpdated(roads)
     } catch (err) {
       console.log('[RoadAggregator] Poll error (will retry):', err)
