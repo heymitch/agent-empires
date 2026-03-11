@@ -46,6 +46,10 @@ import type {
   PostToolUseEvent,
   ManagedSession,
   SessionStatus,
+  FleetPeerInfo,
+  FleetPeerJoinedMessage,
+  FleetPeerLeftMessage,
+  FleetDiscoverMessage,
 } from '../shared/types'
 import { TerritoryStateManager } from './game/TerritoryStateManager'
 import { ThreatRenderer, type ThreatEvent as ClientThreatEvent, type TerritoryBoundsGetter } from './renderer/ThreatRenderer'
@@ -59,6 +63,8 @@ import { ObjectiveRenderer, type ObjectiveData } from './renderer/ObjectiveRende
 import { ProductionChainRenderer, type ProductionChainData } from './renderer/ProductionChainRenderer'
 import { AbilityBar } from './hud/AbilityBar'
 import { EconomyPanel } from './hud/EconomyPanel'
+import { FleetDashboard } from './hud/FleetDashboard'
+import { TimelinePanel, type SessionEvent } from './hud/TimelinePanel'
 import { UnitInspectionPanel, type ToolUseRecord } from './hud/UnitInspectionPanel'
 import { toastManager } from './hud/ToastManager'
 import { KeyboardOverlay } from './hud/KeyboardOverlay'
@@ -128,8 +134,28 @@ let abilityBar: AbilityBar
 let cooldownManager: CooldownManager
 let productionChainRenderer: ProductionChainRenderer
 let economyPanel: EconomyPanel
+let fleetDashboard: FleetDashboard
 let keyboardOverlay: KeyboardOverlay
 let unitInspectionPanel: UnitInspectionPanel
+let timelinePanel: TimelinePanel
+
+// Session history for timeline (keyed by session id, ring buffer of 100)
+const sessionHistory: Map<string, SessionEvent[]> = new Map()
+
+function pushSessionEvent(sessionId: string, event: SessionEvent): void {
+  let history = sessionHistory.get(sessionId)
+  if (!history) {
+    history = []
+    sessionHistory.set(sessionId, history)
+  }
+  history.push(event)
+  // Ring buffer: keep last 100
+  if (history.length > 100) {
+    sessionHistory.set(sessionId, history.slice(-100))
+  }
+  // Feed to timeline if currently showing this unit
+  timelinePanel.addEvent(sessionId, event)
+}
 
 // Recent tool uses per session (keyed by session id, last 5 per session)
 const recentToolsMap: Map<string, ToolUseRecord[]> = new Map()
@@ -318,6 +344,20 @@ async function init() {
         if (pos) floatingPanel.updatePosition(pos.x, pos.y)
       }
     }
+
+    // Update inspection panel with live data (throttled to ~4Hz via frame skip)
+    if (unitInspectionPanel?.isShowing() && Math.floor(battlefield.app.ticker.lastTime / 250) !== Math.floor((battlefield.app.ticker.lastTime - battlefield.app.ticker.deltaMS) / 250)) {
+      const uid = unitInspectionPanel.getUnitId()
+      if (uid) {
+        const unit = battlefield.getUnit(uid)
+        const session = sessions.get(uid)
+        if (unit) {
+          const recentTools = recentToolsMap.get(uid) || []
+          const combo = comboTracker.getCombo(uid)
+          unitInspectionPanel.update(unit, session, recentTools, combo)
+        }
+      }
+    }
   })
 
   // 4. Initialize HUD
@@ -353,6 +393,7 @@ async function init() {
 
   // 4c. Economy Panel (toggle with Shift+E)
   economyPanel = new EconomyPanel()
+  timelinePanel = new TimelinePanel()
 
   // 4d. Keyboard Overlay (toggle with ?)
   keyboardOverlay = new KeyboardOverlay()
@@ -1177,6 +1218,21 @@ function handleEvent(event: ClaudeEvent, isHistory = false) {
         // Feed to floating panel if showing this session
         if (floatingPanel.isVisible() && session && floatingPanel.getUnitId() === session.id) {
           floatingPanel.addActivity(activityItem)
+        }
+        // Track recent tool uses for inspection panel
+        if (session) {
+          const toolRecord: ToolUseRecord = {
+            toolName: e.tool,
+            timestamp: event.timestamp,
+            description: desc || undefined,
+          }
+          let list = recentToolsMap.get(session.id)
+          if (!list) {
+            list = []
+            recentToolsMap.set(session.id, list)
+          }
+          list.push(toolRecord)
+          if (list.length > 5) list.shift()
         }
         break
       }
