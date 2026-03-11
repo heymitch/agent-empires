@@ -9,9 +9,10 @@
  * - Selection ring when selected
  */
 
-import { Container, Graphics, Text, TextStyle, Circle } from 'pixi.js'
+import { Container, Graphics, Text, TextStyle, Circle, Sprite, Texture } from 'pixi.js'
 import type { TerritoryId } from './TerrainRenderer'
 import type { ZoomVisibility } from './ZoomController'
+import { SpriteAtlas } from './SpriteAtlas'
 
 export type UnitStatus = 'idle' | 'working' | 'thinking' | 'combat' | 'exhausted' | 'offline'
 export type UnitClass = 'command' | 'operations' | 'recon'
@@ -67,6 +68,7 @@ export class UnitRenderer {
   private _sustainedTool: SustainedToolType = null
   private _sustainedPhase = 0
   private modelLabel: Text
+  private badgeSprite: Sprite | null = null
   private createdAt: number
 
   // Combo display
@@ -110,6 +112,9 @@ export class UnitRenderer {
     this.body = new Graphics()
     this.drawBody()
     this.container.addChild(this.body)
+
+    // Unit badge sprite (layered on top of body, centered)
+    this.tryAttachBadge()
 
     // Sustained tool effects layer (renders on top of body, around the unit)
     this.sustainedGraphics = new Graphics()
@@ -200,6 +205,35 @@ export class UnitRenderer {
         break
       }
     }
+  }
+
+  /**
+   * Attach badge sprite from SpriteAtlas if loaded.
+   * Called at construction and when unit class changes.
+   * No-op if atlas isn't ready yet — procedural body is always the fallback.
+   */
+  private tryAttachBadge(): void {
+    if (!SpriteAtlas.isReady) return
+
+    const tex = SpriteAtlas.getUnitBadge(this._unitClass)
+    if (tex === Texture.EMPTY) return
+
+    // Remove previous badge if present
+    if (this.badgeSprite) {
+      this.container.removeChild(this.badgeSprite)
+      this.badgeSprite.destroy()
+      this.badgeSprite = null
+    }
+
+    this.badgeSprite = new Sprite(tex)
+    this.badgeSprite.anchor.set(0.5)
+    this.badgeSprite.width = 24
+    this.badgeSprite.height = 24
+    this.badgeSprite.alpha = 0.85
+
+    // Insert badge above body but below sustainedGraphics
+    const bodyIndex = this.container.getChildIndex(this.body)
+    this.container.addChildAt(this.badgeSprite, bodyIndex + 1)
   }
 
   private drawStatusRing(): void {
@@ -370,6 +404,7 @@ export class UnitRenderer {
     ;(this.modelLabel.style as TextStyle).fill = cfg.accent
 
     this.drawBody()
+    this.tryAttachBadge()
     this.drawStatusRing()
     this.drawHealthBar()
     this.drawSelectionRing()
@@ -474,6 +509,11 @@ export class UnitRenderer {
         this.comboText.destroy()
         this.comboText = null
       }
+    }
+
+    // Lazy badge attach: if atlas loaded after construction, attach now
+    if (!this.badgeSprite && SpriteAtlas.isReady) {
+      this.tryAttachBadge()
     }
 
     // Pulse animation

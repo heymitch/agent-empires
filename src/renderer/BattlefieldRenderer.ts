@@ -12,6 +12,7 @@ import { getZoomVisibility } from './ZoomController'
 import { FogOfWar } from './FogOfWar'
 import { MinimapRenderer } from './MinimapRenderer'
 import { ParticleSystem } from './ParticleSystem'
+import { SpriteAtlas } from './SpriteAtlas'
 import { WORLD_WIDTH, WORLD_HEIGHT, ISO_TILT } from './constants'
 
 export { WORLD_WIDTH, WORLD_HEIGHT }
@@ -86,6 +87,11 @@ export class BattlefieldRenderer {
     })
 
     this.container.appendChild(this.app.canvas)
+
+    // Load sprite atlas textures (non-blocking — renderers fall back to procedural if not ready)
+    SpriteAtlas.init().catch((err) => {
+      console.warn('[SpriteAtlas] Failed to load sprite sheets, using procedural fallbacks:', err)
+    })
 
     // World container holds everything that moves with the camera
     this.worldContainer = new Container()

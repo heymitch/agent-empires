@@ -65,6 +65,12 @@ export const STATUS_INDICATOR_OFFSETS: Record<string, { x: number; y: number; w:
   offline: { x: 96, y: 0, w: 32, h: 32 },
 };
 
+export const UNIT_BADGE_OFFSETS: Record<string, { x: number; y: number; w: number; h: number }> = {
+  command: { x: 0, y: 0, w: 32, h: 32 },
+  operations: { x: 32, y: 0, w: 32, h: 32 },
+  recon: { x: 64, y: 0, w: 32, h: 32 },
+};
+
 export const RESOURCE_ICON_OFFSETS: Record<string, { x: number; y: number; w: number; h: number }> = {
   tokens: { x: 0, y: 0, w: 32, h: 32 },
   compute: { x: 32, y: 0, w: 32, h: 32 },
