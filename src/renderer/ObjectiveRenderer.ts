@@ -95,6 +95,8 @@ export class ObjectiveRenderer {
   // Track per-territory index for offset placement
   private territoryCounters: Map<string, number> = new Map()
 
+  onObjectiveDefeated: ((objective: ObjectiveData) => void) | null = null
+
   constructor(
     layer: Container,
     getCenterFn: (territory: string) => { x: number; y: number }
@@ -139,6 +141,7 @@ export class ObjectiveRenderer {
         // Check for defeat transition
         if (visual.data.status !== 'defeated' && obj.status === 'defeated') {
           this.triggerDefeatAnimation(visual)
+          this.onObjectiveDefeated?.(obj)
         }
         visual.data = obj
       }

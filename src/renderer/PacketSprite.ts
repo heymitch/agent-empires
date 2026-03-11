@@ -109,6 +109,7 @@ export class PacketManager {
   private packets: ActivePacket[] = []
   private roads: RoadCurve[] = []
   private elapsed = 0
+  onPacketArrive: ((packet: PacketConfig) => void) | null = null
 
   constructor(
     layer: Container,
@@ -205,6 +206,7 @@ export class PacketManager {
           pkt.t = 1
           pkt.arrived = true
           pkt.flashTimer = ARRIVAL_FLASH_DURATION
+          this.onPacketArrive?.(pkt.config)
         }
       } else {
         pkt.flashTimer -= dt

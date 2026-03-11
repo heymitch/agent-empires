@@ -58,6 +58,7 @@ import { PacketManager, type PacketConfig } from './renderer/PacketSprite'
 import { ObjectiveRenderer, type ObjectiveData } from './renderer/ObjectiveRenderer'
 import { ProductionChainRenderer, type ProductionChainData } from './renderer/ProductionChainRenderer'
 import { AbilityBar } from './hud/AbilityBar'
+import { EconomyPanel } from './hud/EconomyPanel'
 import { CooldownManager } from './game/CooldownManager'
 import { HOTKEY_ORDER } from './game/SkillRegistry'
 
@@ -123,6 +124,7 @@ let controlGroupManager: ControlGroupManager
 let abilityBar: AbilityBar
 let cooldownManager: CooldownManager
 let productionChainRenderer: ProductionChainRenderer
+let economyPanel: EconomyPanel
 
 // Production chain data cache — updated via WebSocket, keyed by territory
 const productionChainCache: Map<string, ProductionChainData> = new Map()
@@ -136,6 +138,7 @@ const sessions: Map<string, ManagedSession> = new Map()
 let selectedUnitId: string | null = null
 let focusedSessionId: string | null = null
 let isConnected = false
+let threatNearTimer = 0  // Throttle timer for threat proximity sound
 
 // Map tool names to territories for unit placement
 function toolToTerritory(tool: string): TerritoryId {
@@ -212,6 +215,14 @@ async function init() {
     (territory) => battlefield.terrainRenderer.getTerritoryCenter(territory as TerritoryId)
   )
 
+  // Wire sound callbacks for packet arrival and objective defeat
+  packetManager.onPacketArrive = () => {
+    soundManager.play('packet_arrive')
+  }
+  objectiveRenderer.onObjectiveDefeated = () => {
+    soundManager.play('objective_defeat')
+  }
+
   // ProductionChainRenderer: Factorio-style territory production view
   productionChainRenderer = new ProductionChainRenderer(
     battlefield.productionLayer,
@@ -261,6 +272,30 @@ async function init() {
     }))
     threatRenderer.update(dt * 1000, unitPositions) // ThreatRenderer expects ms
 
+    // Threat proximity sound: play low rumble when threat within 300px of any unit (throttled to 5s)
+    threatNearTimer -= dt
+    if (threatNearTimer <= 0) {
+      const threatPositions = threatRenderer.getThreatPositions()
+      let nearbyFound = false
+      outer:
+      for (const tp of threatPositions) {
+        for (const up of unitPositions) {
+          const dx = tp.x - up.x
+          const dy = tp.y - up.y
+          if (dx * dx + dy * dy < 300 * 300) {
+            nearbyFound = true
+            break outer
+          }
+        }
+      }
+      if (nearbyFound) {
+        soundManager.play('threat_near')
+        threatNearTimer = 5.0  // Throttle: max once per 5 seconds
+      } else {
+        threatNearTimer = 0.5  // Re-check more frequently when no threats are near
+      }
+    }
+
     // Tick territory state manager every ~1s (using frame accumulator)
     if (Math.floor(battlefield.app.ticker.lastTime / 1000) !== Math.floor((battlefield.app.ticker.lastTime - battlefield.app.ticker.deltaMS) / 1000)) {
       territoryStateManager.tick()
@@ -306,6 +341,9 @@ async function init() {
   const intelPanelEl = document.getElementById('intel-panel')
   if (intelPanelEl) intelPanelEl.style.display = 'none'
 
+  // 4c. Economy Panel (toggle with Shift+E)
+  economyPanel = new EconomyPanel()
+
   // 5. Setup battlefield handler dependencies
   battlefieldDeps = {
     gameState,
@@ -333,7 +371,7 @@ async function init() {
             body: JSON.stringify({ name: opts.name, cwd: opts.cwd }),
           })
           if (response.ok) {
-            soundManager.play('unit_deployed')
+            soundManager.play('deploy_napoleon')
             const name = opts.name || 'new unit'
             commandBar.setTicker(`Deploying ${name} to ${opts.territory || 'hq'}`)
           } else {
@@ -507,10 +545,11 @@ async function init() {
           })
           if (hpRes.ok) {
             const { objective } = await hpRes.json() as { objective: { hp_remaining: number; hp_total: number; status: string } }
-            soundManager.play('command_sent')
             if (objective.status === 'defeated') {
+              soundManager.play('objective_defeat')
               commandBar.setTicker(`BOSS DEFEATED: "${target.name}"!`)
             } else {
+              soundManager.play('command_sent')
               commandBar.setTicker(`"${target.name}" HP: ${objective.hp_remaining}/${objective.hp_total}`)
             }
           } else {
@@ -629,6 +668,9 @@ async function init() {
 
   // 10. Not-connected overlay handlers
   setupOverlay()
+
+  // Expose sound engine for manual control (mute toggle, volume)
+  ;(window as any).__soundEngine = soundManager
 
   console.log('[Agent Empires] Initialized')
 }
@@ -761,6 +803,42 @@ function setupEventClient() {
         objectiveRenderer.updateObjectives(snapshot.objectives as ObjectiveData[])
         console.log(`[FleetRestore] Restored ${snapshot.objectives.length} objectives`)
       }
+    } else if ((msg as any).type === 'resource_update') {
+      // Single resource update — accumulate into economy panel
+      const { type, amount } = (msg as any).payload as { type: string; amount: number; description: string }
+      const tx = { type, amount, timestamp: new Date().toISOString() }
+      economyPanel.updateRevenue(
+        economyPanel['mrr'],
+        economyPanel['todayTotal'] + amount,
+        [tx, ...economyPanel['transactions']].slice(0, 5)
+      )
+      // Also update the resource bar's revenue
+      resourceBar.updateRevenue(economyPanel['todayTotal'] + amount)
+    } else if ((msg as any).type === 'monitor') {
+      // MonitorOrchestrator heartbeat — full revenue snapshot
+      const revenue = (msg as any).payload?.revenue as { mrr: number; transactions: any[] } | undefined
+      if (revenue) {
+        const txs = (revenue.transactions || []).map((t: any) => ({
+          type: t.type || 'payment',
+          amount: t.amount || 0,
+          timestamp: t.timestamp || t.created_at || new Date().toISOString(),
+        }))
+        // Calculate today's total from transactions with today's date
+        const todayStr = new Date().toISOString().slice(0, 10)
+        const todayTotal = txs
+          .filter((t: any) => t.timestamp.startsWith(todayStr))
+          .reduce((sum: number, t: any) => sum + t.amount, 0)
+        // Build daily totals for sparkline from transaction timestamps
+        const dailyMap = new Map<string, number>()
+        for (const t of txs) {
+          const day = t.timestamp.slice(0, 10)
+          dailyMap.set(day, (dailyMap.get(day) || 0) + t.amount)
+        }
+        const sortedDays = Array.from(dailyMap.keys()).sort()
+        const dailyTotals = sortedDays.map(d => dailyMap.get(d) || 0)
+        economyPanel.updateRevenue(revenue.mrr, todayTotal, txs.slice(0, 5), dailyTotals)
+        resourceBar.updateRevenue(revenue.mrr)
+      }
     }
   })
 
@@ -853,7 +931,7 @@ function ensureUnit(session: ManagedSession) {
 
     // Particle burst for new unit
     battlefield.particleSystem.burst(unit.worldX, unit.worldY, 0x00ffcc, 15)
-    soundManager.play('unit_deployed')
+    soundManager.play('deploy_napoleon')
 
     // Set unit class from session data
     const unitClass = (session as any).unitClass as UnitClass | undefined
@@ -1305,6 +1383,12 @@ function setupKeyboard() {
         e.preventDefault()
         e.stopPropagation()
       }
+    }
+
+    // Shift+E: toggle Economy Panel
+    if (key === 'E' && e.shiftKey) {
+      e.preventDefault()
+      economyPanel.toggle()
     }
   })
 }

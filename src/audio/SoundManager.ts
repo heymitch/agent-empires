@@ -42,6 +42,13 @@ export type SoundName =
   | 'deploy' | 'combat_read' | 'combat_write' | 'combat_bash'
   | 'combat_search' | 'combat_web' | 'task_complete'
   | 'alert' | 'revenue'
+  // Napoleon-era battlefield sounds (PRD 06 Section 4)
+  | 'deploy_napoleon'
+  | 'combo_napoleon'
+  | 'collapse'
+  | 'threat_near'
+  | 'objective_defeat'
+  | 'packet_arrive'
 
 // Kept for backward compatibility with callers that pass spatial options
 export interface SoundPlayOptions {
@@ -212,6 +219,25 @@ class SoundManager {
       const ctx = this.ensureContext()
       const hz = midiToHz(60 + normalizedValue * 24)
       this._tone(ctx, 'triangle', hz, 0.001, 0.05, this.volume * 0.25, 0)
+    } catch (_) { /* ignore */ }
+  }
+
+  /**
+   * Play combo sound with tier-specific pitch.
+   * tier 1 (combo) = C5, tier 2 (streak) = E5, tier 3 (rampage) = G5
+   */
+  playCombo(tier: number): void {
+    if (!this.enabled) return
+    try {
+      const ctx = this.ensureContext()
+      const TIER_NOTES = [noteToHz('C5'), noteToHz('E5'), noteToHz('G5')]
+      const hz = TIER_NOTES[Math.min(tier - 1, TIER_NOTES.length - 1)] || TIER_NOTES[0]
+      const gain = this.volume * (0.45 + tier * 0.05)
+      this._tone(ctx, 'triangle', hz, 0.002, 0.08, gain, 0)
+      // Add a subtle harmonic overtone for higher tiers
+      if (tier >= 2) {
+        this._tone(ctx, 'sine', hz * 1.5, 0.002, 0.06, gain * 0.3, 0.01)
+      }
     } catch (_) { /* ignore */ }
   }
 
@@ -576,6 +602,66 @@ class SoundManager {
       this._tone(ctx, 'sine', noteToHz('E6'), 0.001, 0.08, vol * 0.65, 0)
       this._tone(ctx, 'sine', noteToHz('A5'), 0.001, 0.08, vol * 0.65, 0)
       this._tone(ctx, 'triangle', noteToHz('C6'), 0.01, 0.2, vol * 0.35, 0.05)
+    },
+
+    // ===== NAPOLEON-ERA BATTLEFIELD SOUNDS (PRD 06 Section 4) =====
+
+    /**
+     * deploy_napoleon: Ascending tone C4→G4→C5, 300ms, warm sine wave — unit spawning
+     * Inspired by the "Drum Roll + Horn" from PRD 06 §4.3
+     */
+    deploy_napoleon: (ctx, vol) => {
+      this._tone(ctx, 'sine', noteToHz('C4'), 0.02, 0.08, vol * 0.5, 0)
+      this._tone(ctx, 'sine', noteToHz('G4'), 0.02, 0.08, vol * 0.5, 0.1)
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.02, 0.15, vol * 0.55, 0.2)
+    },
+
+    /**
+     * combo_napoleon: Short hit, pitch increases with tier.
+     * Base pitch at C5; caller should use playCombo(tier) for pitch shifting.
+     * Snappy 100ms metallic click — like abacus bead (PRD 06 §4.2)
+     */
+    combo_napoleon: (ctx, vol) => {
+      // Default at C5 — playCombo() overrides with tier-specific pitch
+      this._tone(ctx, 'triangle', noteToHz('C5'), 0.002, 0.08, vol * 0.55, 0)
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.001, 0.04, vol * 0.25, 0.01)
+    },
+
+    /**
+     * collapse: Descending tone C4→C3, 500ms, saw wave with filter sweep down — unit dying
+     * Inspired by "Defeat (Somber Horn)" from PRD 06 §4.3
+     */
+    collapse: (ctx, vol) => {
+      this._sweep(ctx, 'sawtooth', noteToHz('C4'), noteToHz('C3'), 0.5, vol * 0.45, 0)
+    },
+
+    /**
+     * threat_near: Low rumble (60Hz + 80Hz sine), 200ms, fades in — enemy approaching
+     * Inspired by ambient war room tension from PRD 06 §4.1
+     */
+    threat_near: (ctx, vol) => {
+      this._tone(ctx, 'sine', 60, 0.08, 0.12, vol * 0.3, 0)
+      this._tone(ctx, 'sine', 80, 0.08, 0.12, vol * 0.25, 0)
+    },
+
+    /**
+     * objective_defeat: Triumphant chord C4+E4+G4+C5, 800ms, sine waves with slow release
+     * Inspired by "Victory Fanfare" from PRD 06 §4.3
+     */
+    objective_defeat: (ctx, vol) => {
+      const gain = vol * 0.45
+      this._tone(ctx, 'sine', noteToHz('C4'), 0.05, 0.75, gain, 0)
+      this._tone(ctx, 'sine', noteToHz('E4'), 0.05, 0.75, gain * 0.9, 0)
+      this._tone(ctx, 'sine', noteToHz('G4'), 0.05, 0.75, gain * 0.85, 0)
+      this._tone(ctx, 'sine', noteToHz('C5'), 0.05, 0.75, gain * 0.8, 0)
+    },
+
+    /**
+     * packet_arrive: Tiny blip (1200Hz sine, 50ms, very quiet) — packet reaching destination
+     * Minimal notification, should be barely perceptible
+     */
+    packet_arrive: (ctx, vol) => {
+      this._tone(ctx, 'sine', 1200, 0.002, 0.048, vol * 0.15, 0)
     },
   }
 }

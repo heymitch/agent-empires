@@ -227,6 +227,17 @@ export class ThreatRenderer {
     this.getTerritoryCenter = getTerritoryCenter
   }
 
+  /** Return positions of all active (non-exiting) threats for proximity detection */
+  getThreatPositions(): Array<{ x: number; y: number }> {
+    const positions: Array<{ x: number; y: number }> = []
+    for (const threat of this.threats.values()) {
+      if (threat.animState !== 'exiting') {
+        positions.push({ x: threat.container.x, y: threat.container.y })
+      }
+    }
+    return positions
+  }
+
   addThreat(event: ThreatEvent): void {
     if (this.threats.has(event.id)) return
 
