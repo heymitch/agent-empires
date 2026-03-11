@@ -192,6 +192,10 @@ export class TerrainRenderer {
   private pulseOffsets: Map<TerritoryId, number> = new Map();
   private flowOffsets:  Map<TerritoryId, number> = new Map();
 
+  // Activity glow — pulsing border glow when units are working inside
+  private activityLevels: Map<TerritoryId, number> = new Map();
+  private glowGraphics:   Map<TerritoryId, Graphics> = new Map();
+
   constructor(app: Application, parent?: Container) {
     this.app = app;
     this.container = new Container();
@@ -246,6 +250,14 @@ export class TerrainRenderer {
     return null;
   }
 
+  /**
+   * Set activity level for territory border glow.
+   * 0 = no activity, 1 = low (1-2 units), 2 = medium (3-5), 3 = high (6+)
+   */
+  setTerritoryActivity(territory: TerritoryId, level: number): void {
+    this.activityLevels.set(territory, Math.max(0, Math.min(3, level)));
+  }
+
   /** Update reactive state for a territory. */
   updateTerritoryState(
     id: TerritoryId,
@@ -285,6 +297,10 @@ export class TerrainRenderer {
       const border = new Graphics();
       tc.addChild(border);
       this.borderGraphics.set(def.id, border);
+
+      const glow = new Graphics();
+      tc.addChild(glow);
+      this.glowGraphics.set(def.id, glow);
 
       const flow = new Graphics();
       tc.addChild(flow);
@@ -405,6 +421,39 @@ export class TerrainRenderer {
     } else {
       // Default: warm dark border — visible enough to see territory shapes
       borderG.poly(def.polygon).stroke({ color: PAL.border, width: 1.5, alpha: 0.6 });
+    }
+
+    // ── Activity glow (pulsing border glow when units are working) ───────────
+    const glowG = this.glowGraphics.get(def.id)!;
+    glowG.clear();
+
+    const activityLevel = this.activityLevels.get(def.id) ?? 0;
+    if (activityLevel > 0) {
+      const phase = this.pulseOffsets.get(def.id) ?? 0;
+      const sin = Math.sin(this.elapsed * Math.PI * 2 * 0.8 + phase); // 0.8 Hz pulse
+
+      let alphaBase: number, alphaAmp: number, extraWidth: number;
+      switch (activityLevel) {
+        case 1: alphaBase = 0.20; alphaAmp = 0.05; extraWidth = 2; break;
+        case 2: alphaBase = 0.30; alphaAmp = 0.10; extraWidth = 4; break;
+        default: alphaBase = 0.45; alphaAmp = 0.15; extraWidth = 6; break;
+      }
+
+      const glowAlpha = alphaBase + sin * alphaAmp;
+      const glowColor = def.baseColor;
+      const brightGlow = brighten(glowColor, 2.5);
+
+      glowG.poly(def.polygon).stroke({
+        color: brightGlow,
+        width: 1.5 + extraWidth,
+        alpha: glowAlpha,
+      });
+      // Outer diffuse pass for softer glow
+      glowG.poly(def.polygon).stroke({
+        color: brightGlow,
+        width: 1.5 + extraWidth * 2,
+        alpha: glowAlpha * 0.3,
+      });
     }
 
     // ── Flow lines (active territories only) ─────────────────────────────────

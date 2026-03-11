@@ -67,6 +67,10 @@ export class BattlefieldRenderer {
   onUnitClick: ((unitId: string, screenX: number, screenY: number) => void) | null = null
   private unitClickedThisFrame = false
 
+  // Activity glow throttle
+  private activityUpdateTimer = 0
+  private activityUpdateInterval = 0.5 // seconds
+
   constructor(container: HTMLElement) {
     this.app = new Application()
     this.container = container
@@ -257,11 +261,41 @@ export class BattlefieldRenderer {
       .map(u => ({ x: u.worldX, y: u.worldY }))
     this.fogOfWar.update(unitPositions, new Map())
 
+    // Update territory activity glow (throttled to every 500ms)
+    const dtSec = this.app.ticker.deltaMS / 1000
+    this.activityUpdateTimer += dtSec
+    if (this.activityUpdateTimer >= this.activityUpdateInterval) {
+      this.activityUpdateTimer = 0
+      this.computeTerritoryActivity()
+    }
+
     // Update terrain (animated flow lines, pulsing borders)
     this.terrainRenderer.draw(this.app.ticker.deltaMS / 1000)
 
     // Update minimap
     this.minimapRenderer.update()
+  }
+
+  /** Count working/combat units per territory and set activity glow levels. */
+  private computeTerritoryActivity(): void {
+    const counts = new Map<TerritoryId, number>()
+
+    for (const unit of this.units.values()) {
+      if (unit.status === 'working' || unit.status === 'combat') {
+        counts.set(unit.territory, (counts.get(unit.territory) ?? 0) + 1)
+      }
+    }
+
+    const territories = this.terrainRenderer.getAllTerritories()
+    for (const def of territories) {
+      const id = def.id as TerritoryId
+      const count = counts.get(id) ?? 0
+      let level = 0
+      if (count >= 6) level = 3
+      else if (count >= 3) level = 2
+      else if (count >= 1) level = 1
+      this.terrainRenderer.setTerritoryActivity(id, level)
+    }
   }
 
   // === Unit Management ===
